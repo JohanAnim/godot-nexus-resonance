@@ -20,24 +20,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: linux
-            runner: ubuntu-22.04
-            platform: linux
-            artifact_name: nexus_resonance-linux
           - os: windows
             runner: ubuntu-22.04
             platform: windows
             artifact_name: nexus_resonance-windows
-          - os: macos
-            runner: macos-latest
-            platform: macos
-            artifact_name: nexus_resonance-macos
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           submodules: recursive
+
+      - name: Ensure submodules (fallback if checkout missed them)
+        run: |
+          if [ ! -f src/lib/godot-cpp/SConstruct ]; then
+            mkdir -p src/lib
+            git clone -b 4.5 --depth 1 https://github.com/godotengine/godot-cpp src/lib/godot-cpp
+          fi
 
       - name: Install Steam Audio SDK
         run: python3 scripts/install_steam_audio.py
@@ -143,10 +143,10 @@ jobs:
             echo ""
             echo "## Installation"
             echo ""
-            echo "Download the addon archive for your platform and extract it into your Godot project's \`addons/\` folder."
+            echo "Download the addon archive and extract it into your Godot project's \`addons/\` folder."
             echo "- **nexus_resonance-windows.zip** – Windows x64"
-            echo "- **nexus_resonance-linux.zip** – Linux x64"
-            echo "- **nexus_resonance-macos.zip** – macOS (Universal)"
+            echo ""
+            echo "macOS/Linux: Clone the repo and build locally with \`scons platform=<os> target=editor\`."
             echo ""
             echo "Developers can download **nexus_resonance-source-v${VERSION}.zip** for the full source code."
             echo ""

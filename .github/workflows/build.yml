@@ -39,50 +39,6 @@ jobs:
             echo "src=${{ steps.filter.outputs.src }}" >> $GITHUB_OUTPUT
           fi
 
-  build-linux:
-    name: Linux
-    needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Install Steam Audio SDK
-        run: python3 scripts/install_steam_audio.py
-
-      - name: Add GCC problem matcher
-        run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
-
-      - name: Cache SCons build
-        uses: actions/cache@v4
-        with:
-          path: .scons-cache
-          key: scons-Linux-linux-v2-${{ hashFiles('src/lib/godot-cpp/SConstruct', 'SConstruct', 'src/register_types.cpp', 'src/resonance_server.cpp') }}
-          restore-keys: |
-            scons-Linux-linux-
-
-      - name: Install Python & SCons
-        run: |
-          sudo apt-get update
-          python3 -m pip install scons
-          scons --version
-
-      - name: Create bin directory
-        run: mkdir -p audio_resonance_tool/addons/nexus_resonance/bin
-
-      - name: Build GDExtension
-        env:
-          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
-        run: scons platform=linux target=editor arch=x86_64 build_tests=0 -j$(nproc)
-
-      - name: Upload Linux artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-editor-x86_64
-          path: audio_resonance_tool/addons/nexus_resonance/bin/
-
   build-windows:
     name: Windows
     needs: changes
@@ -91,7 +47,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           submodules: recursive
+
+      - name: Ensure submodules (fallback if checkout missed them)
+        run: |
+          if [ ! -f src/lib/godot-cpp/SConstruct ]; then
+            mkdir -p src/lib
+            git clone -b 4.5 --depth 1 https://github.com/godotengine/godot-cpp src/lib/godot-cpp
+          fi
 
       - name: Install Steam Audio SDK
         run: python3 scripts/install_steam_audio.py
@@ -131,47 +95,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-editor-x86_64
-          path: audio_resonance_tool/addons/nexus_resonance/bin/
-
-  build-macos:
-    name: macOS
-    needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Install Steam Audio SDK
-        run: python3 scripts/install_steam_audio.py
-
-      - name: Add GCC problem matcher
-        run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
-
-      - name: Cache SCons build
-        uses: actions/cache@v4
-        with:
-          path: .scons-cache
-          key: scons-macOS-macos-v2-${{ hashFiles('src/lib/godot-cpp/SConstruct', 'SConstruct', 'src/register_types.cpp', 'src/resonance_server.cpp') }}
-          restore-keys: |
-            scons-macOS-macos-
-
-      - name: Install SCons
-        run: |
-          python3 -m pip install --break-system-packages scons
-          scons --version
-
-      - name: Create bin directory
-        run: mkdir -p audio_resonance_tool/addons/nexus_resonance/bin
-
-      - name: Build GDExtension
-        env:
-          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
-        run: scons platform=macos target=editor arch=universal build_tests=0 -j$(sysctl -n hw.ncpu)
-
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-editor-universal
           path: audio_resonance_tool/addons/nexus_resonance/bin/
