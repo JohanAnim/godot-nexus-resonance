@@ -59,7 +59,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .scons-cache
-          key: scons-Linux-linux-${{ hashFiles('src/lib/godot-cpp/SConstruct', 'SConstruct', 'src/register_types.cpp', 'src/resonance_server.cpp') }}
+          key: scons-Linux-linux-v2-${{ hashFiles('src/lib/godot-cpp/SConstruct', 'SConstruct', 'src/register_types.cpp', 'src/resonance_server.cpp') }}
           restore-keys: |
             scons-Linux-linux-
 
@@ -68,6 +68,9 @@ jobs:
           sudo apt-get update
           python3 -m pip install scons
           scons --version
+
+      - name: Create bin directory
+        run: mkdir -p audio_resonance_tool/addons/nexus_resonance/bin
 
       - name: Build GDExtension
         env:
@@ -100,7 +103,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .scons-cache
-          key: scons-Linux-windows-${{ hashFiles('src/lib/godot-cpp/SConstruct', 'SConstruct', 'src/register_types.cpp', 'src/resonance_server.cpp') }}
+          key: scons-Linux-windows-v2-${{ hashFiles('src/lib/godot-cpp/SConstruct', 'SConstruct', 'src/register_types.cpp', 'src/resonance_server.cpp') }}
           restore-keys: |
             scons-Linux-windows-
 
@@ -115,6 +118,9 @@ jobs:
         run: |
           python3 -m pip install scons
           scons --version
+
+      - name: Create bin directory
+        run: mkdir -p audio_resonance_tool/addons/nexus_resonance/bin
 
       - name: Build GDExtension
         env:
@@ -147,7 +153,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .scons-cache
-          key: scons-macOS-macos-${{ hashFiles('src/lib/godot-cpp/SConstruct', 'SConstruct', 'src/register_types.cpp', 'src/resonance_server.cpp') }}
+          key: scons-macOS-macos-v2-${{ hashFiles('src/lib/godot-cpp/SConstruct', 'SConstruct', 'src/register_types.cpp', 'src/resonance_server.cpp') }}
           restore-keys: |
             scons-macOS-macos-
 
@@ -155,6 +161,9 @@ jobs:
         run: |
           python3 -m pip install --break-system-packages scons
           scons --version
+
+      - name: Create bin directory
+        run: mkdir -p audio_resonance_tool/addons/nexus_resonance/bin
 
       - name: Build GDExtension
         env:
