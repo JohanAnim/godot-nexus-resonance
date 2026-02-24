@@ -10,7 +10,7 @@ def main():
     if not version:
         version = (sys.argv[1] if len(sys.argv) > 1 else "").lstrip("v")
 
-    changelog_path = os.environ.get("CHANGELOG_PATH", "CHANGELOG.md")
+    changelog_path = os.environ.get("CHANGELOG_PATH", "docs/CHANGELOG.md")
     if not os.path.exists(changelog_path):
         print("See CHANGELOG.md for details.", end="")
         return
