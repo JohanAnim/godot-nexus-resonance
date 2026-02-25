@@ -80,6 +80,18 @@ jobs:
           cp -r audio_resonance_tool/addons/nexus_resonance/* release_addon/addons/nexus_resonance/
           cp LICENSE release_addon/addons/nexus_resonance/
 
+      - name: Verify bin/nexus_resonance.dll exists (debug)
+        run: |
+          BIN_DLL="release_addon/addons/nexus_resonance/bin/nexus_resonance.dll"
+          if [ -f "$BIN_DLL" ]; then
+            echo "OK: nexus_resonance.dll found"
+            ls -la release_addon/addons/nexus_resonance/bin/
+          else
+            echo "ERROR: nexus_resonance.dll MISSING"
+            find release_addon -type f
+            exit 1
+          fi
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -110,6 +122,18 @@ jobs:
         run: |
           mkdir -p release_packages
           zip -r release_packages/nexus_resonance-windows-v${{ steps.version.outputs.version }}.zip addons
+
+      - name: Verify zip contains bin/nexus_resonance.dll (debug)
+        run: |
+          ZIP="release_packages/nexus_resonance-windows-v${{ steps.version.outputs.version }}.zip"
+          if unzip -l "$ZIP" | grep -q "addons/nexus_resonance/bin/nexus_resonance.dll"; then
+            echo "OK: nexus_resonance.dll in zip"
+            unzip -l "$ZIP" | head -50
+          else
+            echo "ERROR: nexus_resonance.dll NOT in zip"
+            unzip -l "$ZIP"
+            exit 1
+          fi
 
       - name: Prepare release body
         id: changelog

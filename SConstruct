@@ -28,7 +28,7 @@ steam_audio_lib = os.environ.get("STEAM_AUDIO_LIB_PATH", "src/lib/steamaudio/lib
 
 # Output configuration and Steam Audio linking per platform
 if env["platform"] == "windows":
-    env.Replace(SHLIBSUFFIX=".dll")
+    env.Replace(SHLIBSUFFIX=".dll", SHLIBPREFIX="")  # No "lib" prefix (MinGW cross-compile defaults to lib)
     arch_subdir = "windows-x64" if env["arch"] == "x86_64" else "windows-x86"
     env.Append(LIBPATH=[os.path.join(steam_audio_lib, arch_subdir)])
     env.Append(LIBS=["phonon"])
