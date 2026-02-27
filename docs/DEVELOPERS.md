@@ -63,7 +63,7 @@ Run via Godot with GUT addon or CLI.
 
 1. Update version in `src/resonance_constants.h` (NEXUS_RESONANCE_VERSION).
 2. Tag: `git tag v0.8.1`
-3. Push tag: triggers `.github/workflows/release.yml` (builds Windows/Linux, creates GitHub Release).
+3. Push tag: triggers `.github/workflows/release.yml` (builds Windows with MSVC, creates GitHub Release).
 
 ## Coding Conventions
 
