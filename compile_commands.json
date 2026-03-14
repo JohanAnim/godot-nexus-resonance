@@ -6180,6 +6180,12 @@
         "output": "build\\windows\\template_debug\\resonance_dynamic_geometry.windows.template_debug.x86_64.obj"
     },
     {
+        "command": "cl /Fobuild\\windows\\template_debug\\resonance_fmod_bridge.windows.template_debug.x86_64.obj /c src\\resonance_fmod_bridge.cpp /TP /std:c++17 /nologo /utf-8 /MT /experimental:external /external:anglebrackets /external:W0 /O2 /DTYPED_METHOD_BIND /DNOMINMAX /DWINDOWS_ENABLED /D_HAS_EXCEPTIONS=0 /DTHREADS_ENABLED /DHOT_RELOAD_ENABLED /DDEBUG_ENABLED /DNDEBUG /DGDEXTENSION /Isrc\\lib\\godot-cpp\\gdextension /Isrc\\lib\\godot-cpp\\include /Isrc\\lib\\godot-cpp\\gen\\include /Isrc /Isrc\\lib\\godot-cpp\\include /Isrc\\lib\\godot-cpp\\gen\\include /Isrc\\lib\\steamaudio\\include",
+        "directory": "C:\\__projects__\\nexus-resonance",
+        "file": "src\\resonance_fmod_bridge.cpp",
+        "output": "build\\windows\\template_debug\\resonance_fmod_bridge.windows.template_debug.x86_64.obj"
+    },
+    {
         "command": "cl /Fobuild\\windows\\template_debug\\resonance_geometry.windows.template_debug.x86_64.obj /c src\\resonance_geometry.cpp /TP /std:c++17 /nologo /utf-8 /MT /experimental:external /external:anglebrackets /external:W0 /O2 /DTYPED_METHOD_BIND /DNOMINMAX /DWINDOWS_ENABLED /D_HAS_EXCEPTIONS=0 /DTHREADS_ENABLED /DHOT_RELOAD_ENABLED /DDEBUG_ENABLED /DNDEBUG /DGDEXTENSION /Isrc\\lib\\godot-cpp\\gdextension /Isrc\\lib\\godot-cpp\\include /Isrc\\lib\\godot-cpp\\gen\\include /Isrc /Isrc\\lib\\godot-cpp\\include /Isrc\\lib\\godot-cpp\\gen\\include /Isrc\\lib\\steamaudio\\include",
         "directory": "C:\\__projects__\\nexus-resonance",
         "file": "src\\resonance_geometry.cpp",

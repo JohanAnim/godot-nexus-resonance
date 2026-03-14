@@ -17,7 +17,7 @@ extends Node3D
 var debug_mesh_instance: MeshInstance3D
 var immediate_mesh: ImmediateMesh
 
-func _ready():
+func _ready() -> void:
 	debug_mesh_instance = MeshInstance3D.new()
 	immediate_mesh = ImmediateMesh.new()
 	debug_mesh_instance.mesh = immediate_mesh
@@ -31,7 +31,7 @@ func _ready():
 	
 	add_child(debug_mesh_instance)
 
-func _process(_delta):
+func _process(_delta: float) -> void:
 	if not listener_camera or not audio_source_node:
 		return
 		
@@ -47,8 +47,10 @@ func _process(_delta):
 	
 	var color = Color.GREEN # Green = Clear
 	
-	var space_state = get_world_3d().direct_space_state
-	# Ensure we have a space state (can be null during scene loading)
+	var w3d = get_world_3d()
+	if not w3d:
+		return
+	var space_state = w3d.direct_space_state
 	if space_state:
 		var query = PhysicsRayQueryParameters3D.create(start, end)
 		var result = space_state.intersect_ray(query)

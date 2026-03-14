@@ -8,12 +8,23 @@
 	</description>
 	<tutorials>
 	</tutorials>
+	<methods>
+		<method name="has_valid_asset">
+			<return type="bool" />
+			<description>
+				Returns true if static_scene_asset is assigned and valid. Used by bake and export to skip when no geometry is present.
+			</description>
+		</method>
+	</methods>
 	<members>
 		<member name="static_scene_asset" type="ResonanceGeometryAsset" setter="set_static_scene_asset" getter="get_static_scene_asset">
 			The exported merged static mesh. Assigned automatically by Export Meshes to Steam Audio.
 		</member>
 		<member name="scene_name_when_exported" type="String" setter="set_scene_name_when_exported" getter="get_scene_name_when_exported">
 			Scene name at export time (for reference).
+		</member>
+		<member name="export_hash" type="int" setter="set_export_hash" getter="get_export_hash" default="0">
+			Hash of geometry at last export. Used to skip re-export when unchanged. Assigned automatically.
 		</member>
 	</members>
 </class>

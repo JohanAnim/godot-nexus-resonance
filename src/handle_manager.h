@@ -7,6 +7,7 @@
 #include <queue>
 #include <vector>
 #include <cstdint>
+#include <climits>
 
 namespace godot {
 
@@ -20,20 +21,31 @@ inline void _handle_release_batch(IPLProbeBatch* p) {
 
 /// Generic handle-based resource manager. Reduces duplication between SourceManager and ProbeBatchManager.
 /// T: stored resource type (IPLSource, IPLProbeBatch).
-/// ReleaseFunc: void (*)(T*) - called when releasing a stored resource.
+/// ReleaseFunc: void (*)(T*) - called with address of stored resource when releasing. Must handle null.
 template<typename T, void (*ReleaseFunc)(T*)>
 class HandleManagerBase {
+public:
+    HandleManagerBase() = default;
+    HandleManagerBase(const HandleManagerBase&) = delete;
+    HandleManagerBase(HandleManagerBase&&) = delete;
+    HandleManagerBase& operator=(const HandleManagerBase&) = delete;
+    HandleManagerBase& operator=(HandleManagerBase&&) = delete;
+
 protected:
     int32_t next_handle = 0;
     std::priority_queue<int32_t, std::vector<int32_t>, std::greater<int32_t>> free_handles;
     std::unordered_map<int32_t, T> items;
     mutable std::mutex mutex;
 
+    /// Returns a new handle, or -1 on overflow (no free handles and next_handle would exceed INT32_MAX).
     int32_t alloc_handle() {
         if (!free_handles.empty()) {
             int32_t h = free_handles.top();
             free_handles.pop();
             return h;
+        }
+        if (next_handle >= INT32_MAX) {
+            return -1;
         }
         return next_handle++;
     }
@@ -47,6 +59,8 @@ protected:
         items.clear();
     }
 
+    /// Transfers all items to out and clears the manager. Caller must release each item.
+    /// Must be called with mutex held (by derived class).
     void clear_and_reset(std::vector<T>& out) {
         out.clear();
         for (auto& pair : items) {
@@ -58,12 +72,25 @@ protected:
     }
 };
 
+class SourceManager : public HandleManagerBase<IPLSource, _handle_release_source> {
+public:
+    SourceManager();
+    ~SourceManager();
+    /// Retains source (takes ownership of a ref). Caller may release their ref after. Returns handle or -1 for null.
+    int32_t add_source(IPLSource source);
+    void remove_source(int32_t handle);
+    IPLSource get_source(int32_t handle);
+    void get_all_handles(std::vector<int32_t>& out);
+};
+
 class ProbeBatchManager : public HandleManagerBase<IPLProbeBatch, _handle_release_batch> {
 public:
     ProbeBatchManager();
     ~ProbeBatchManager();
+    /// Takes ownership of batch; caller must not retain. Returns handle or -1 for null.
     int32_t add_batch(IPLProbeBatch batch);
     IPLProbeBatch take_batch(int32_t handle);
+    /// Transfers all batches to out and clears the manager. Caller must release each batch.
     void get_all_batches(std::vector<IPLProbeBatch>& out);
     IPLProbeBatch get_first_batch();
     IPLProbeBatch get_batch(int32_t handle) const;

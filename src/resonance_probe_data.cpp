@@ -36,6 +36,14 @@ int64_t ResonanceProbeData::get_pathing_params_hash() const {
     return static_cast<int64_t>(pathing_params_hash);
 }
 
+void ResonanceProbeData::set_static_scene_params_hash(int64_t p_hash) {
+    static_scene_params_hash = static_cast<uint32_t>(p_hash & 0xFFFFFFFFu);
+}
+
+int64_t ResonanceProbeData::get_static_scene_params_hash() const {
+    return static_cast<int64_t>(static_scene_params_hash);
+}
+
 void ResonanceProbeData::set_static_source_params_hash(int64_t p_hash) {
     static_source_params_hash = static_cast<uint32_t>(p_hash & 0xFFFFFFFFu);
 }
@@ -113,6 +121,8 @@ void ResonanceProbeData::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_bake_params_hash"), &ResonanceProbeData::get_bake_params_hash);
     ClassDB::bind_method(D_METHOD("set_pathing_params_hash", "p_hash"), &ResonanceProbeData::set_pathing_params_hash);
     ClassDB::bind_method(D_METHOD("get_pathing_params_hash"), &ResonanceProbeData::get_pathing_params_hash);
+    ClassDB::bind_method(D_METHOD("set_static_scene_params_hash", "p_hash"), &ResonanceProbeData::set_static_scene_params_hash);
+    ClassDB::bind_method(D_METHOD("get_static_scene_params_hash"), &ResonanceProbeData::get_static_scene_params_hash);
     ClassDB::bind_method(D_METHOD("set_static_source_params_hash", "p_hash"), &ResonanceProbeData::set_static_source_params_hash);
     ClassDB::bind_method(D_METHOD("get_static_source_params_hash"), &ResonanceProbeData::get_static_source_params_hash);
     ClassDB::bind_method(D_METHOD("set_static_listener_params_hash", "p_hash"), &ResonanceProbeData::set_static_listener_params_hash);
@@ -128,6 +138,7 @@ void ResonanceProbeData::_bind_methods() {
     ADD_PROPERTY(PropertyInfo(Variant::PACKED_VECTOR3_ARRAY, "probe_positions", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_probe_positions", "get_probe_positions");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "bake_params_hash", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_bake_params_hash", "get_bake_params_hash");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "pathing_params_hash", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_pathing_params_hash", "get_pathing_params_hash");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "static_scene_params_hash", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_static_scene_params_hash", "get_static_scene_params_hash");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "static_source_params_hash", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_static_source_params_hash", "get_static_source_params_hash");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "static_listener_params_hash", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_static_listener_params_hash", "get_static_listener_params_hash");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "baked_reflection_type", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_baked_reflection_type", "get_baked_reflection_type");

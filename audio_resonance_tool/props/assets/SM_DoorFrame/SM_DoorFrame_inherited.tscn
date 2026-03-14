@@ -1,0 +1,5 @@
+[gd_scene format=3 uid="uid://bx0uvir7wh4q0"]
+
+[ext_resource type="PackedScene" uid="uid://4re5ir6se2th" path="res://props/assets/SM_DoorFrame/SM_DoorFrame.gltf" id="1_fuklo"]
+
+[node name="SM_DoorFrame2" unique_id=1778646200 instance=ExtResource("1_fuklo")]

@@ -1,7 +1,6 @@
 #ifndef RESONANCE_DEBUG_AGENT_H
 #define RESONANCE_DEBUG_AGENT_H
 
-#include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 
 namespace godot {

@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://bvxa2j4brs436"]
+
+[ext_resource type="PackedScene" uid="uid://3w0xfar26mc4" path="res://props/assets/SM_StairsHandle_01/SM_StairsHandle_01.gltf" id="1_fwseg"]
+
+[node name="SM_StairsHandle_01" type="Node3D" unique_id=1582626550]
+
+[node name="SM_StairsHandle_01" type="StaticBody3D" parent="." unique_id=203228583 instance=ExtResource("1_fwseg")]
+collision_mask = 131
+metadata/_nexus_gltf_path = "res://props/assets/SM_StairsHandle_01/SM_StairsHandle_01.gltf"

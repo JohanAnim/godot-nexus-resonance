@@ -11,6 +11,8 @@ namespace godot {
     /// Holds serialized Steam Audio mesh data (from iplStaticMeshSave).
     /// Use with ResonanceGeometry when dynamic=true for export/load workflow:
     /// better stability (Phonon native format) and faster runtime load.
+    /// For static: merged geometry from multiple ResonanceStaticGeometry nodes (one asset per scene).
+    /// For dynamic: single mesh per object (one asset per ResonanceDynamicGeometry).
     class ResonanceGeometryAsset : public Resource {
         GDCLASS(ResonanceGeometryAsset, Resource)
 
@@ -43,7 +45,7 @@ namespace godot {
         const uint8_t* get_data_ptr() const;
         int64_t get_size() const;
 
-        bool is_valid() const { return mesh_data.size() > 0; }
+        bool is_valid() const { return !mesh_data.is_empty(); }
     };
 
 } // namespace godot

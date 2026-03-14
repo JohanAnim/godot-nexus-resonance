@@ -13,8 +13,10 @@ namespace godot {
         GDCLASS(ResonanceListener, Node3D)
 
     public:
-        ResonanceListener();
-        ~ResonanceListener();
+        ResonanceListener() = default;
+
+        ResonanceListener(const ResonanceListener&) = delete;
+        ResonanceListener(ResonanceListener&&) = delete;
 
         void set_listener_valid(bool valid) { listener_valid = valid; }
         bool is_listener_valid() const { return listener_valid; }
@@ -27,7 +29,6 @@ namespace godot {
         static void _bind_methods();
 
         bool listener_valid = true;
-        double heartbeat_timer = 0.0;
 
         void _ensure_reflection_viz();
         void _draw_reflection_rays(const Array& segments);

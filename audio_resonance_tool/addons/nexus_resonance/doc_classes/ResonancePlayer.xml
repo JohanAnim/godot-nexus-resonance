@@ -25,5 +25,8 @@
 			Pathing: Optional ResonanceProbeVolume to use for path finding. Empty = use first loaded volume with pathing. Only used when player_config is set.
 			Note: Deleting a probe volume that is still referenced here can trigger a Godot engine error. Clear this property manually before deleting the volume if needed.
 		</member>
+		<member name="exclude_from_debug" type="bool" setter="set_exclude_from_debug" getter="get_exclude_from_debug" default="false">
+			When true, this player is hidden from the debug overlay Audio Instrumentation list.
+		</member>
 	</members>
 </class>

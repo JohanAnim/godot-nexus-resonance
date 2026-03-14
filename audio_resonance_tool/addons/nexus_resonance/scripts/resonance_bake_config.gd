@@ -5,10 +5,13 @@ class_name ResonanceBakeConfig
 ## Per-volume bake configuration. Link from ResonanceProbeVolume for presets.
 ## Saves as .tres for reusable presets. Falls back to create_default() when null.
 
+const Constants = preload("resonance_config_constants.gd")
+
 # --- Reflection ---
 @export_group("Reflection")
 ## Reverb algorithm for bake: Convolution (full IR), Parametric (quick), Hybrid (balanced).
-@export_enum("Convolution:0", "Parametric:1", "Hybrid:2") var reflection_type: int = 2
+## Should match ResonanceRuntimeConfig.reflection_type for consistent playback (BakeConfig has no TAN).
+@export_enum("Convolution:0", "Parametric:1", "Hybrid:2") var reflection_type: int = Constants.REFLECTION_TYPE_HYBRID
 
 # --- Pathing ---
 @export_group("Pathing")
@@ -21,15 +24,15 @@ var _pathing_enabled: bool = false
 		if _pathing_enabled != v:
 			_pathing_enabled = v
 			notify_property_list_changed()
-## Pathing visibility range in meters. Max distance for path finding.
+## Baking Visibility Range: Probes beyond this distance (m) are not considered mutually visible. Unity: Baking Visibility Range.
 @export_range(10, 2000, 10) var bake_pathing_vis_range: float = 500.0
-## Pathing path range in meters. Max length of propagated paths.
+## Baking Path Range: Probes beyond this distance (m) have no path between them. Unity: Baking Path Range.
 @export_range(10, 500, 10) var bake_pathing_path_range: float = 100.0
-## Number of pathing samples per probe. Higher = smoother, longer bake.
+## Baking Visibility Samples: Point samples per probe for visibility tests. Unity: Baking Visibility Samples. Higher = smoother, longer bake.
 @export_range(4, 128, 4) var bake_pathing_num_samples: int = 16
-## Sphere radius around each probe for probe-to-probe visibility tests. Larger = more samples, longer bake.
+## Baking Visibility Radius: Each probe is a sphere of this radius (m). Unity: Baking Visibility Radius. Larger = more samples, longer bake.
 @export_range(0.1, 2.0, 0.1) var bake_pathing_radius: float = 0.5
-## Pathing propagation threshold. Lower = more paths, longer bake.
+## Baking Visibility Threshold: Fraction of unoccluded rays required. Lower = more paths, longer bake. Unity: Baking Visibility Threshold.
 @export_range(0.01, 1.0, 0.01) var bake_pathing_threshold: float = 0.1
 
 # --- Additional Bake ---

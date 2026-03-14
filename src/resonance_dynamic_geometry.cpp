@@ -8,8 +8,6 @@ ResonanceDynamicGeometry::ResonanceDynamicGeometry() {
     set_dynamic(true);
 }
 
-ResonanceDynamicGeometry::~ResonanceDynamicGeometry() {}
-
 void ResonanceDynamicGeometry::_bind_methods() {}
 
 void ResonanceDynamicGeometry::_validate_property(PropertyInfo& p_property) const {

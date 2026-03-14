@@ -3,9 +3,22 @@
 
 #include <phonon.h>
 #include <godot_cpp/classes/audio_frame.hpp>
-#include "resonance_utils.h"
+#include "resonance_constants.h"
 
 namespace godot {
+
+    enum class MixerInitFlags : int {
+        NONE = 0,
+        BUFFERS = 1 << 0,
+        DECODEEFFECT = 1 << 1,
+        DECODEEFFECT_7_1 = 1 << 2,
+        VIRTUALSURROUND = 1 << 3,
+    };
+    inline MixerInitFlags operator|(MixerInitFlags a, MixerInitFlags b) {
+        return static_cast<MixerInitFlags>(static_cast<int>(a) | static_cast<int>(b));
+    }
+    inline MixerInitFlags& operator|=(MixerInitFlags& a, MixerInitFlags b) { a = a | b; return a; }
+    inline bool operator&(MixerInitFlags a, MixerInitFlags b) { return (static_cast<int>(a) & static_cast<int>(b)) != 0; }
 
     class ResonanceMixerProcessor {
     private:
@@ -22,14 +35,20 @@ namespace godot {
 
         void _write_stereo_to_audio_frames(float* left, float* right, AudioFrame* out_frames, int frame_count);
         void _decode_ambisonic_to_stereo_buffer(IPLAudioBuffer* ambi_in, const IPLCoordinateSpace3& listener_coords);
+        bool _can_decode() const;
 
-        bool is_initialized = false;
-        int frame_size = 1024;
+        MixerInitFlags init_flags = MixerInitFlags::NONE;
+        int frame_size = resonance::kGodotDefaultFrameSize;
         int ambisonic_order = 1;
 
     public:
-        ResonanceMixerProcessor();
+        ResonanceMixerProcessor() = default;
         ~ResonanceMixerProcessor();
+
+        ResonanceMixerProcessor(const ResonanceMixerProcessor&) = delete;
+        ResonanceMixerProcessor& operator=(const ResonanceMixerProcessor&) = delete;
+        ResonanceMixerProcessor(ResonanceMixerProcessor&&) = delete;
+        ResonanceMixerProcessor& operator=(ResonanceMixerProcessor&&) = delete;
 
         void initialize(IPLContext p_context, int p_sample_rate, int p_frame_size, int p_ambisonic_order);
         void cleanup();

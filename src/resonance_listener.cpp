@@ -1,29 +1,21 @@
 #include "resonance_listener.h"
+#include "resonance_constants.h"
 #include "resonance_server.h"
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/viewport.hpp>
+#include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/variant/vector3.hpp>
-#include <godot_cpp/variant/utility_functions.hpp>
-
 using namespace godot;
-
-ResonanceListener::ResonanceListener() {
-}
-
-ResonanceListener::~ResonanceListener() {
-    if (reflection_mesh_instance) {
-        reflection_mesh_instance->queue_free();
-        reflection_mesh_instance = nullptr;
-    }
-}
 
 void ResonanceListener::_enter_tree() {
     add_to_group("resonance_listener");
 }
 
 void ResonanceListener::_exit_tree() {
+    reflection_mesh_instance = nullptr;
     remove_from_group("resonance_listener");
 }
 
@@ -33,6 +25,16 @@ void ResonanceListener::_process(double delta) {
 
     ResonanceServer* server = ResonanceServer::get_singleton();
     if (!server || !server->is_initialized()) return;
+
+    // Only update when this listener is in the active viewport path (descendant of viewport's camera).
+    // With multiple listeners (e.g. split-screen), only the one under the active camera drives the server.
+    Viewport* vp = get_viewport();
+    if (vp) {
+        Camera3D* cam = vp->get_camera_3d();
+        if (!cam || !cam->is_ancestor_of(this)) {
+            return;
+        }
+    }
 
     server->set_listener_valid(listener_valid);
 
@@ -54,13 +56,6 @@ void ResonanceListener::_process(double delta) {
         }
     } else {
         if (reflection_mesh_instance) reflection_mesh_instance->set_visible(false);
-    }
-
-    // Heartbeat Debug (1x per sec)
-    heartbeat_timer += delta;
-    if (heartbeat_timer > 1.0) {
-        heartbeat_timer = 0.0;
-        // UtilityFunctions::print("Nexus Resonance: Listener Tick Active at ", position);
     }
 }
 
@@ -87,7 +82,7 @@ void ResonanceListener::_draw_reflection_rays(const Array& segments) {
     reflection_immediate_mesh->clear_surfaces();
     reflection_immediate_mesh->surface_begin(Mesh::PRIMITIVE_LINES);
 
-    const Color col = Color(0.2f, 1.0f, 0.2f);
+    const Color col = Color(resonance::kListenerReflectionRayR, resonance::kListenerReflectionRayG, resonance::kListenerReflectionRayB);
     reflection_immediate_mesh->surface_set_color(col);
 
     for (int i = 0; i < segments.size(); i++) {

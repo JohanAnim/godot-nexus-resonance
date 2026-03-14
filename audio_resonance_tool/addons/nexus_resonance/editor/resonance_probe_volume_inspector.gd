@@ -14,27 +14,29 @@ func _can_handle(object: Object) -> bool:
 	return object != null and object.is_class("ResonanceProbeVolume")
 
 func _parse_begin(object: Object) -> void:
+	if not editor_interface:
+		return
 	if bake_runner:
 		var volumes: Array[Node] = []
 		volumes.append(object)
 		bake_runner.ensure_resonance_server_for_volumes(volumes)
 
 	# Optional info panel with step-by-step guide
-	var foldable = FoldableContainer.new()
-	foldable.title = "Workflow Guide"
+	var foldable: FoldableContainer = FoldableContainer.new()
+	foldable.title = tr(UIStrings.INSPECTOR_WORKFLOW_GUIDE)
 	foldable.folded = true
-	var steps = VBoxContainer.new()
+	var steps: VBoxContainer = VBoxContainer.new()
 	steps.add_theme_constant_override("separation", 4)
-	var step_lines = [
-		"1. Add ResonanceGeometry to MeshInstance3Ds (walls, floor, ceiling)",
-		"2. Assign ResonanceMaterial to geometry",
-		"3. Tools > Nexus Resonance > Export Static Scene",
-		"4. Bake Probes (button below)",
-		"5. Optionally: Bake Pathing, Static Source/Listener"
+	var step_lines: Array = [
+		UIStrings.INSPECTOR_STEP_1,
+		UIStrings.INSPECTOR_STEP_2,
+		UIStrings.INSPECTOR_STEP_3,
+		UIStrings.INSPECTOR_STEP_4,
+		UIStrings.INSPECTOR_STEP_5
 	]
 	for line in step_lines:
 		var lbl = Label.new()
-		lbl.text = line
+		lbl.text = tr(line)
 		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		lbl.add_theme_font_size_override("font_size", 12)
 		steps.add_child(lbl)
@@ -42,7 +44,7 @@ func _parse_begin(object: Object) -> void:
 	add_custom_control(foldable)
 
 	# Validation prereqs in collapsible section (Ready/Not ready in header)
-	var base = editor_interface.get_base_control() if editor_interface else null
+	var base: Control = editor_interface.get_base_control() if editor_interface else null
 	if bake_runner and base and bake_runner.has_method("get_validation_checklist_for_volume"):
 		var checklist = bake_runner.get_validation_checklist_for_volume(object)
 		var any_missing = false
@@ -50,8 +52,8 @@ func _parse_begin(object: Object) -> void:
 			if not item.get("ok", false):
 				any_missing = true
 				break
-		var prereq_foldable = FoldableContainer.new()
-		prereq_foldable.title = "Prerequisites: Ready" if not any_missing else "Prerequisites: Not ready"
+		var prereq_foldable: FoldableContainer = FoldableContainer.new()
+		prereq_foldable.title = tr(UIStrings.INSPECTOR_PREREQ_READY) if not any_missing else tr(UIStrings.INSPECTOR_PREREQ_NOT_READY)
 		prereq_foldable.folded = true
 		prereq_foldable.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4) if not any_missing else Color(1.0, 0.4, 0.4))
 		var prereq_vbox = VBoxContainer.new()
@@ -65,15 +67,15 @@ func _parse_begin(object: Object) -> void:
 
 	# Preview Bake Settings
 	var preview_btn = Button.new()
-	preview_btn.text = UIStrings.BTN_PREVIEW_BAKE_SETTINGS
-	preview_btn.tooltip_text = UIStrings.TT_PREVIEW_BAKE
+	preview_btn.text = tr(UIStrings.BTN_PREVIEW_BAKE_SETTINGS)
+	preview_btn.tooltip_text = tr(UIStrings.TT_PREVIEW_BAKE)
 	preview_btn.pressed.connect(_on_preview_bake_pressed.bind(object))
 	add_custom_control(preview_btn)
 
 	# Bake Probes
 	var btn = Button.new()
-	btn.text = UIStrings.BTN_BAKE_PROBES
-	btn.tooltip_text = UIStrings.TT_BAKE_PROBES
+	btn.text = tr(UIStrings.BTN_BAKE_PROBES)
+	btn.tooltip_text = tr(UIStrings.TT_BAKE_PROBES)
 	btn.icon = ResonanceEditorDialogs.get_icon(base, UIStrings.ICON_BAKE, "Bake")
 	btn.pressed.connect(_on_bake_pressed.bind(object))
 	add_custom_control(btn)
@@ -85,15 +87,15 @@ func _on_preview_bake_pressed(obj: Object) -> void:
 	var est_time = bake_runner.estimate_bake_time(obj) if bake_runner and bake_runner.has_method("estimate_bake_time") else ""
 	var msg := ""
 	if probe_count >= 0:
-		msg = UIStrings.PROGRESS_PROBES % probe_count
+		msg = tr(UIStrings.PROGRESS_PROBES) % probe_count
 	if not est_time.is_empty():
-		msg = msg + "\n" + UIStrings.PROGRESS_ESTIMATED_TIME % est_time if not msg.is_empty() else UIStrings.PROGRESS_ESTIMATED_TIME % est_time
+		msg = msg + "\n" + tr(UIStrings.PROGRESS_ESTIMATED_TIME) % est_time if not msg.is_empty() else tr(UIStrings.PROGRESS_ESTIMATED_TIME) % est_time
 	if msg.is_empty():
-		msg = "Configure bake_config for accurate estimates."
+		msg = tr(UIStrings.INFO_CONFIGURE_BAKE_CONFIG_FOR_ESTIMATES)
 	if editor_interface:
 		ResonanceEditorDialogs.show_success_toast(editor_interface, msg)
 	else:
-		print(UIStrings.PREFIX + msg)
+		print_rich("[color=cyan]Nexus Resonance:[/color] " + msg)
 
 func _on_bake_pressed(obj: Object) -> void:
 	if not obj or not obj.is_class("ResonanceProbeVolume"):
@@ -103,4 +105,4 @@ func _on_bake_pressed(obj: Object) -> void:
 		volumes.append(obj)
 		bake_runner.run_bake(volumes)
 	else:
-		ResonanceEditorDialogs.show_warning(editor_interface, UIStrings.WARN_BAKE_RUNNER_NOT_SET)
+		ResonanceEditorDialogs.show_warning(editor_interface, tr(UIStrings.WARN_BAKE_RUNNER_NOT_SET))

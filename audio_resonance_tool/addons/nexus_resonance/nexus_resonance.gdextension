@@ -2,7 +2,7 @@
 
 entry_symbol = "nexus_resonance_library_init"
 compatibility_minimum = "4.1"
-doc_path = "doc_classes"
+doc_path = "res://addons/nexus_resonance/doc_classes"
 
 [libraries]
 
@@ -37,3 +37,4 @@ ResonanceStaticGeometry = "res://addons/nexus_resonance/ui/icons/resonance_stati
 ResonanceDynamicGeometry = "res://addons/nexus_resonance/ui/icons/resonance_dyn_geometry.svg"
 ResonancePlayer = "res://addons/nexus_resonance/ui/icons/audio_stream_player_3d_icon.svg"
 ResonanceAmbisonicPlayer = "res://addons/nexus_resonance/ui/icons/resonance_ambisonic_player_icon.svg"
+ResonanceStaticScene = "res://addons/nexus_resonance/ui/icons/resonance_staticScene_icon.svg"

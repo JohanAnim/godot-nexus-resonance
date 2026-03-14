@@ -30,7 +30,19 @@ func _on_export_pressed(obj: Object) -> void:
 	var parent = geom.get_parent()
 	var parent_name = parent.name if parent else "mesh"
 	if not DirAccess.dir_exists_absolute(ResonancePaths.PATH_RESONANCE_MESHES):
-		DirAccess.make_dir_recursive_absolute(ResonancePaths.PATH_RESONANCE_MESHES)
+		var err: int = DirAccess.make_dir_recursive_absolute(ResonancePaths.PATH_RESONANCE_MESHES)
+		if err != OK or not DirAccess.dir_exists_absolute(ResonancePaths.PATH_RESONANCE_MESHES):
+			if editor_interface:
+				ResonanceEditorDialogs.show_error_dialog(
+					editor_interface,
+					UIStrings.DIALOG_EXPORT_FAILED_TITLE,
+					UIStrings.ERR_MKDIR_RESONANCE_MESHES % err,
+					"",
+					""
+				)
+			else:
+				push_error(UIStrings.PREFIX + UIStrings.ERR_MKDIR_RESONANCE_MESHES % err)
+			return
 	var save_path = ResonancePaths.PATH_RESONANCE_MESHES + str(parent_name).to_snake_case() + "_dynamic.tres"
 	var err = geom.export_dynamic_mesh_to_asset(save_path)
 	if err == OK:

@@ -9,6 +9,20 @@
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="get_bus_name_effective">
+			<return type="StringName" />
+			<param index="0" name="global_fallback" type="StringName" />
+			<description>
+				Returns effective bus for Direct + Pathing. Use Global = global_fallback. Custom = bus_name or global_fallback if empty.
+			</description>
+		</method>
+		<method name="get_reverb_bus_name_effective">
+			<return type="StringName" />
+			<param index="0" name="global_fallback" type="StringName" />
+			<description>
+				Returns effective reverb bus name. Use Global = global_fallback. Custom = reverb_bus_name or global_fallback if empty.
+			</description>
+		</method>
 		<method name="create_default" qualifiers="static">
 			<return type="ResonancePlayerConfig" />
 			<description>
@@ -47,6 +61,18 @@
 		<member name="air_absorption_high" type="float" default="1.0">
 			High-band (≥8 kHz) EQ.
 		</member>
+		<member name="bus_override" type="int" default="-1">
+			Bus for Direct + Pathing. -1 = Use Global (RuntimeConfig.bus), 0 = Custom (use bus_name).
+		</member>
+		<member name="bus_name" type="StringName" default="Master">
+			Bus for Direct + Pathing when bus_override is Custom. Must exist in Audio Bus Layout.
+		</member>
+		<member name="reverb_bus_override" type="int" default="-1">
+			Reverb bus override. -1 = Use Global (RuntimeConfig.reverb_bus_name), 0 = Custom (use reverb_bus_name).
+		</member>
+		<member name="reverb_bus_name" type="StringName" default="">
+			Bus for reverb when reverb_bus_override is Custom. Must exist in Audio Bus Layout.
+		</member>
 		<member name="direct_binaural_override" type="int" default="-1">
 			Per-source binaural override. -1 = use global (RuntimeConfig.reverb_binaural), 0 = panning, 1 = force HRTF.
 		</member>
@@ -57,7 +83,13 @@
 			Shape: 0 = Omnidirectional, 1 = Dipole.
 		</member>
 		<member name="directivity_power" type="float" default="1.0">
-			Sharpness of the directivity pattern (0-4).
+			Sharpness of the directivity pattern (0-4). Only when directivity_input is Simulation.
+		</member>
+		<member name="directivity_input" type="int" default="0">
+			Directivity source: 0=Simulation (dipole), 1=User Defined (use directivity_value).
+		</member>
+		<member name="directivity_value" type="float" default="1.0">
+			Directivity attenuation (0-1). Only when directivity_input is User Defined.
 		</member>
 		<member name="spatial_blend" type="float" default="1.0">
 			Blend between unspatialized (0) and fully 3D spatialized (1).
@@ -65,8 +97,47 @@
 		<member name="use_ambisonics_encode" type="bool" default="false">
 			Encode point source to Ambisonics before binaural.
 		</member>
+		<member name="reflections_type" type="int" default="-1">
+			Reflections simulation: -1=Use Global (baked reverb), 0=Realtime, 1=Baked Reverb, 2=Baked Static Source, 3=Baked Static Listener.
+		</member>
+		<member name="current_baked_source" type="NodePath" default="NodePath()">
+			When reflections_type is Baked Static Source: node whose position was baked. Empty = use player position.
+		</member>
+		<member name="current_baked_listener" type="NodePath" default="NodePath()">
+			When reflections_type is Baked Static Listener: node (e.g. listener) whose position was baked. Empty = use active listener.
+		</member>
+		<member name="reflections_enabled" type="int" default="-1">
+			Enable reflections for this source. -1=Use Global, 0=Disabled, 1=Enabled.
+		</member>
+		<member name="pathing_enabled_override" type="int" default="-1">
+			Enable pathing for this source. -1=Use Global, 0=Disabled, 1=Enabled.
+		</member>
+		<member name="apply_hrtf_to_reflections" type="int" default="-1">
+			Apply HRTF to reflections for this source. -1=Use Global, 0=Disabled, 1=Enabled.
+		</member>
+		<member name="apply_hrtf_to_pathing" type="int" default="-1">
+			Apply HRTF to pathing for this source. -1=Use Global, 0=Disabled, 1=Enabled.
+		</member>
+		<member name="occlusion_input" type="int" default="0">
+			Occlusion source: 0=Simulation (physics), 1=User Defined (use occlusion_value).
+		</member>
+		<member name="occlusion_value" type="float" default="1.0">
+			Occlusion attenuation (0-1). Only when occlusion_input is User Defined.
+		</member>
 		<member name="occlusion_samples" type="int" default="64">
 			Number of rays per source for volumetric occlusion (1-64).
+		</member>
+		<member name="transmission_input" type="int" default="0">
+			Transmission source: 0=Simulation, 1=User Defined (use transmission low/mid/high).
+		</member>
+		<member name="transmission_low" type="float" default="1.0">
+			Low-band transmission (0-1). Only when transmission_input is User Defined.
+		</member>
+		<member name="transmission_mid" type="float" default="1.0">
+			Mid-band transmission (0-1). Only when transmission_input is User Defined.
+		</member>
+		<member name="transmission_high" type="float" default="1.0">
+			High-band transmission (0-1). Only when transmission_input is User Defined.
 		</member>
 		<member name="max_transmission_surfaces" type="int" default="32">
 			Max surfaces for sound transmission through walls (1-256).
@@ -85,9 +156,6 @@
 		</member>
 		<member name="pathing_mix_level" type="float" default="1.0">
 			Volume of pathing (0-10).
-		</member>
-		<member name="pathing_occ_scale" type="float" default="1.0">
-			Pathing gain multiplier (0-10).
 		</member>
 		<member name="reflections_eq_low" type="float" default="1.0">
 			Per-source EQ multiplier for low band.

@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://bqfteekkj8bck"]
+
+[ext_resource type="PackedScene" uid="uid://cl6aooe4rfhb7" path="res://props/assets/SM_Wall_Inner_80dm_Door_01/SM_Wall_Inner_80dm_Door_01.gltf" id="1_2imyf"]
+[ext_resource type="ResonanceMaterial" uid="uid://rb8c736kvibo" path="res://addons/nexus_resonance/materials/brick.tres" id="2_u74xo"]
+[ext_resource type="ArrayMesh" uid="uid://bpk43h2kxtwd5" path="res://props/assets/SM_Wall_Inner_80dm_Door_01/SM_Wall_Inner_80dm_Door_01_reso_1.res" id="3_utr73"]
+
+[node name="SM_Wall_Inner_80dm_Door_012" unique_id=1033703068 instance=ExtResource("1_2imyf")]
+
+[node name="SM_Wall_Inner_80dm_Door_01_reso_1" type="ResonanceStaticGeometry" parent="." index="4" unique_id=597560884]
+material = ExtResource("2_u74xo")
+geometry_override = ExtResource("3_utr73")

@@ -1,7 +1,8 @@
 #include "resonance_server_config.h"
-#include "resonance_sofa_asset.h"
 #include "resonance_constants.h"
+#include <algorithm>
 #include <thread>
+#include <climits>
 
 namespace godot {
 
@@ -9,7 +10,12 @@ int ResonanceServerConfig::config_int(const Dictionary& c, const char* key, int 
     if (!c.has(key)) return def;
     Variant v = c[key];
     if (v.get_type() == Variant::INT) return (int)v;
-    if (v.get_type() == Variant::FLOAT) return (int)(double)v;
+    if (v.get_type() == Variant::FLOAT) {
+        double d = (double)v;
+        if (d > static_cast<double>(INT_MAX)) return INT_MAX;
+        if (d < static_cast<double>(INT_MIN)) return INT_MIN;
+        return static_cast<int>(d);
+    }
     return def;
 }
 
@@ -44,11 +50,23 @@ void ResonanceServerConfig::config_sofa_asset(const Dictionary& c, const char* k
 void ResonanceServerConfig::apply(const Dictionary& config,
     std::function<float(const char*, float)> get_bake_pathing_param) {
     sample_rate = config_int(config, "sample_rate", sample_rate);
+    if (sample_rate < 8000) sample_rate = 8000;
+    if (sample_rate > 192000) sample_rate = 192000;
     frame_size = config_int(config, "audio_frame_size", frame_size);
-    if (frame_size != 256 && frame_size != 512 && frame_size != 1024 && frame_size != 2048)
-        frame_size = resonance::kGodotDefaultFrameSize;
+    {
+        static const int kValidFrameSizes[] = { 256, resonance::kGodotDefaultFrameSize, 1024, resonance::kMaxAudioFrameSize };
+        bool valid = false;
+        for (int fs : kValidFrameSizes) {
+            if (frame_size == fs) { valid = true; break; }
+        }
+        if (!valid) frame_size = resonance::kGodotDefaultFrameSize;
+    }
     ambisonic_order = config_int(config, "ambisonic_order", ambisonic_order);
+    if (ambisonic_order < 1) ambisonic_order = 1;
+    if (ambisonic_order > 3) ambisonic_order = 3;
     max_reverb_duration = config_float(config, "max_reverb_duration", max_reverb_duration);
+    if (max_reverb_duration < 0.1f) max_reverb_duration = 0.1f;
+    if (max_reverb_duration > 10.0f) max_reverb_duration = 10.0f;
     simulation_cpu_cores_percent = config_float(config, "simulation_cpu_cores_percent", simulation_cpu_cores_percent);
     if (simulation_cpu_cores_percent <= 0.0f || simulation_cpu_cores_percent > 1.0f)
         simulation_cpu_cores_percent = 0.05f;
@@ -56,15 +74,24 @@ void ResonanceServerConfig::apply(const Dictionary& config,
     if (nc == 0) nc = 1;
     simulation_threads = static_cast<int>(std::max(1u, static_cast<unsigned int>(simulation_cpu_cores_percent * static_cast<float>(nc))));
     max_rays = config_int(config, "realtime_rays", max_rays);
+    if (max_rays < 0) max_rays = 0;  // 0 = Baked Only
+    if (max_rays > 65535) max_rays = 65535;
     max_bounces = config_int(config, "realtime_bounces", max_bounces);
+    if (max_bounces < 1) max_bounces = 1;
+    if (max_bounces > 64) max_bounces = 64;
     reverb_influence_radius = config_float(config, "reverb_influence_radius", reverb_influence_radius);
+    if (reverb_influence_radius < 0.0f) reverb_influence_radius = 0.0f;
     reverb_max_distance = config_float(config, "reverb_max_distance", reverb_max_distance);
+    if (reverb_max_distance < 0.0f) reverb_max_distance = 0.0f;
     reverb_transmission_amount = config_float(config, "reverb_transmission_amount", reverb_transmission_amount);
     if (reverb_transmission_amount < 0.0f) reverb_transmission_amount = 0.0f;
     if (reverb_transmission_amount > 1.0f) reverb_transmission_amount = 1.0f;
     reflection_type = config_int(config, "reflection_type", reflection_type);
-    if (reflection_type < 0) reflection_type = 0;
-    if (reflection_type > 3) reflection_type = 3;
+    if (reflection_type < resonance::kReflectionConvolution) reflection_type = resonance::kReflectionConvolution;
+    if (reflection_type > resonance::kReflectionTan) reflection_type = resonance::kReflectionTan;
+    default_reflections_mode = config_int(config, "default_reflections_mode", default_reflections_mode);
+    if (default_reflections_mode < 0) default_reflections_mode = 0;
+    if (default_reflections_mode > 1) default_reflections_mode = 1;
     hybrid_reverb_transition_time = config_float(config, "hybrid_reverb_transition_time", hybrid_reverb_transition_time);
     if (hybrid_reverb_transition_time < 0.1f) hybrid_reverb_transition_time = 0.1f;
     if (hybrid_reverb_transition_time > 2.0f) hybrid_reverb_transition_time = 2.0f;
@@ -100,7 +127,11 @@ void ResonanceServerConfig::apply(const Dictionary& config,
     if (pathing_vis_range > 1000.0f) pathing_vis_range = 1000.0f;
 
     pathing_normalize_eq = config_bool(config, "pathing_normalize_eq", pathing_normalize_eq);
-    use_radeon_rays = config_bool(config, "use_radeon_rays", use_radeon_rays);
+    if (config.has("scene_type"))
+        scene_type = config_int(config, "scene_type", scene_type);
+    else
+        scene_type = config_bool(config, "use_radeon_rays", false) ? 2 : 1;  // backwards compatibility
+    if (scene_type < 0 || scene_type > 2) scene_type = 1;
     opencl_device_type = config_int(config, "opencl_device_type", opencl_device_type);
     if (opencl_device_type < 0) opencl_device_type = 0;
     if (opencl_device_type > 2) opencl_device_type = 2;
@@ -110,10 +141,10 @@ void ResonanceServerConfig::apply(const Dictionary& config,
     context_simd_level = config_int(config, "context_simd_level", context_simd_level);
     realtime_irradiance_min_distance = config_float(config, "realtime_irradiance_min_distance", realtime_irradiance_min_distance);
     if (realtime_irradiance_min_distance < 0.05f) realtime_irradiance_min_distance = 0.05f;
-    if (realtime_irradiance_min_distance > 0.5f) realtime_irradiance_min_distance = 0.5f;
+    if (realtime_irradiance_min_distance > 10.0f) realtime_irradiance_min_distance = 10.0f;
     realtime_simulation_duration = config_float(config, "realtime_simulation_duration", realtime_simulation_duration);
-    if (realtime_simulation_duration < 0.5f) realtime_simulation_duration = 0.5f;
-    if (realtime_simulation_duration > 4.0f) realtime_simulation_duration = 4.0f;
+    if (realtime_simulation_duration < 0.1f) realtime_simulation_duration = 0.1f;
+    if (realtime_simulation_duration > 10.0f) realtime_simulation_duration = 10.0f;
     realtime_num_diffuse_samples = config_int(config, "realtime_num_diffuse_samples", realtime_num_diffuse_samples);
     if (realtime_num_diffuse_samples < 8) realtime_num_diffuse_samples = 8;
     if (realtime_num_diffuse_samples > 64) realtime_num_diffuse_samples = 64;

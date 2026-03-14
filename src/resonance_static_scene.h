@@ -7,7 +7,7 @@
 namespace godot {
 
     /// Scene-level component holding the exported static scene asset (merged geometry from iplStaticMeshSave).
-    /// Analog to Unity's SteamAudioStaticMesh. Used for bake (static-only scene) and runtime (loaded at init).
+    /// Used for bake (static-only scene) and runtime (loaded at init).
     class ResonanceStaticScene : public Node3D {
         GDCLASS(ResonanceStaticScene, Node3D)
 

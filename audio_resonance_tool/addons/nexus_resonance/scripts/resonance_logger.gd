@@ -6,6 +6,9 @@ extends Node
 ## C++ calls via Engine.get_singleton("ResonanceLogger").log(...)
 ##
 ## Categories: reflections, realtime_rays, source_volume, pathing, occlusion, init, bake, validation
+##
+## File output uses a mutex-protected queue for thread-safe writes when log() is called from
+## multiple threads (e.g. C++). Entries are flushed to disk in _process() on the main thread.
 
 const DEFAULT_BUFFER_SIZE := 128
 const PROJECT_PREFIX := "audio/nexus_resonance/logger/"
@@ -40,14 +43,39 @@ var _categories_enabled: Dictionary = {}
 var _output_to_debug: bool = true
 var _output_to_file: bool = false
 var _file_path: String = "user://nexus_resonance_log.ndjson"
+var _file_write_queue: Array = []
+var _file_write_mutex: Mutex = Mutex.new()
 
-static var _instance: RefCounted = null
+## Rejects absolute system paths and path traversal. Only user:// and res:// are allowed.
+static func _is_safe_log_path(path: String) -> bool:
+	if path.is_empty():
+		return false
+	if not path.begins_with("user://") and not path.begins_with("res://"):
+		return false
+	if ".." in path or "/../" in path or path.ends_with("/.."):
+		return false
+	return true
 
 func _init() -> void:
 	_load_category_defaults()
 	for cat in ALL_CATEGORIES:
 		if not _categories_enabled.has(cat):
 			_categories_enabled[cat] = true
+
+
+func _ready() -> void:
+	print_rich("[color=cyan]Nexus Resonance:[/color] ResonanceLogger initiated")
+
+
+func _process(_delta: float) -> void:
+	if not _output_to_file:
+		return
+	_file_write_mutex.lock()
+	var to_write: Array = _file_write_queue.duplicate()
+	_file_write_queue.clear()
+	_file_write_mutex.unlock()
+	for entry in to_write:
+		_write_to_file(entry)
 
 
 func _load_category_defaults() -> void:
@@ -60,7 +88,11 @@ func _load_category_defaults() -> void:
 	if ProjectSettings.has_setting(PROJECT_PREFIX + "output_to_file"):
 		_output_to_file = ProjectSettings.get_setting(PROJECT_PREFIX + "output_to_file")
 	if ProjectSettings.has_setting(PROJECT_PREFIX + "file_path"):
-		_file_path = ProjectSettings.get_setting(PROJECT_PREFIX + "file_path")
+		var configured: String = ProjectSettings.get_setting(PROJECT_PREFIX + "file_path")
+		if _is_safe_log_path(configured):
+			_file_path = configured
+		else:
+			push_warning("Nexus Resonance: Logger file_path must be user:// or res:// (no path traversal). Using default.")
 
 
 ## Log a message. Category determines filtering. Data is optional extra context.
@@ -81,7 +113,9 @@ func log(category: StringName, message: String, data: Dictionary = {}) -> void:
 		_output_to_debug_console(category, message, data)
 
 	if _output_to_file:
-		_write_to_file(entry)
+		_file_write_mutex.lock()
+		_file_write_queue.append(entry)
+		_file_write_mutex.unlock()
 
 	log_entry_added.emit(category, message, data)
 
@@ -99,14 +133,16 @@ func _add_to_buffer(entry: Dictionary) -> void:
 
 
 func _output_to_debug_console(category: StringName, message: String, data: Dictionary) -> void:
-	var prefix := "[Nexus Resonance][%s] " % String(category)
+	var prefix := "[color=cyan][Nexus Resonance][%s][/color] " % String(category)
 	var full_msg := prefix + message
 	if not data.is_empty():
 		full_msg += " " + str(data)
-	print(full_msg)
+	print_rich(full_msg)
 
 
 func _write_to_file(entry: Dictionary) -> void:
+	if not _is_safe_log_path(_file_path):
+		return
 	var path := _file_path
 	if path.begins_with("user://") or path.begins_with("res://"):
 		path = ProjectSettings.globalize_path(path)
@@ -117,7 +153,9 @@ func _write_to_file(entry: Dictionary) -> void:
 		"data": entry.data
 	}
 	var line := JSON.stringify(dict) + "\n"
-	var f := FileAccess.open(path, FileAccess.READ_WRITE)
+	var f: FileAccess = null
+	if FileAccess.file_exists(path):
+		f = FileAccess.open(path, FileAccess.READ_WRITE)
 	if f == null:
 		f = FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
@@ -167,12 +205,12 @@ func set_output_to_file(enabled: bool) -> void:
 
 
 func set_file_path(path: String) -> void:
-	_file_path = path
+	if _is_safe_log_path(path):
+		_file_path = path
+	else:
+		push_warning("Nexus Resonance: Logger file_path must be user:// or res:// (no path traversal). Ignored.")
 
 
 ## Returns all category StringNames for UI (e.g. filter checkboxes)
-func get_all_categories() -> Array:
-	var arr: Array = []
-	for c in ALL_CATEGORIES:
-		arr.append(c)
-	return arr
+func get_all_categories() -> Array[StringName]:
+	return ALL_CATEGORIES.duplicate()

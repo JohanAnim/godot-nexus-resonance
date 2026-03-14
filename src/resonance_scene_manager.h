@@ -5,6 +5,7 @@
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
+#include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/classes/resource.hpp>
 #include <atomic>
 #include <functional>
@@ -17,39 +18,64 @@ class ResonanceGeometry;
 class ResonanceGeometryAsset;
 class RayTraceDebugContext;
 
+/// Bundles runtime static scene state for add/load/clear operations (reduces parameter duplication)
+struct RuntimeSceneState {
+    std::vector<IPLStaticMesh>& meshes;
+    int& tri_count;
+    std::vector<int>& debug_ids;
+    int* global_triangle_count;
+    std::atomic<bool>* scene_dirty;
+    std::vector<IPLScene>& sub_scenes;
+    std::vector<IPLInstancedMesh>& instanced_meshes;
+
+    RuntimeSceneState(std::vector<IPLStaticMesh>& m, int& tc, std::vector<int>& di, int* gtc, std::atomic<bool>* sd,
+        std::vector<IPLScene>& ss, std::vector<IPLInstancedMesh>& im)
+        : meshes(m), tri_count(tc), debug_ids(di), global_triangle_count(gtc), scene_dirty(sd), sub_scenes(ss), instanced_meshes(im) {}
+};
+
 /// Manages scene I/O, static meshes from assets, save/load, export, and hash.
 /// Scene handle remains in ResonanceServer; this class operates on it via parameters.
 class ResonanceSceneManager {
 public:
     ResonanceSceneManager() = default;
 
+    ResonanceSceneManager(const ResonanceSceneManager&) = delete;
+    ResonanceSceneManager& operator=(const ResonanceSceneManager&) = delete;
+    ResonanceSceneManager(ResonanceSceneManager&&) = delete;
+    ResonanceSceneManager& operator=(ResonanceSceneManager&&) = delete;
+
     void save_scene_data(IPLContext ctx, IPLScene scene, const String& filename);
+    /// Load scene from serialized file. On failure, optionally creates empty scene and sets out_global_triangle_count to 0.
+    /// @param out_scene Must not be null. Will be released if non-null before loading.
     void load_scene_data(IPLContext ctx, IPLScene* out_scene, IPLSimulator sim,
         IPLSceneType scene_type, IPLEmbreeDevice embree, IPLRadeonRaysDevice radeon,
         const String& filename, int* out_global_triangle_count);
 
     void add_static_scene_from_asset(IPLContext ctx, IPLScene scene, const Ref<ResonanceGeometryAsset>& asset,
-        RayTraceDebugContext* debug_ctx, bool wants_debug_viz,
-        std::vector<IPLStaticMesh>& runtime_meshes, int& runtime_tri_count,
-        std::vector<int>& runtime_debug_ids, int* global_triangle_count, std::atomic<bool>* scene_dirty);
+        RayTraceDebugContext* debug_ctx, bool wants_debug_viz, RuntimeSceneState& state,
+        const Transform3D& transform, IPLSceneType scene_type, IPLEmbreeDevice embree, IPLRadeonRaysDevice radeon);
 
     void load_static_scene_from_asset(IPLContext ctx, IPLScene scene, const Ref<ResonanceGeometryAsset>& asset,
-        RayTraceDebugContext* debug_ctx, bool wants_debug_viz,
-        std::vector<IPLStaticMesh>& runtime_meshes, int& runtime_tri_count,
-        std::vector<int>& runtime_debug_ids, int* global_triangle_count, std::atomic<bool>* scene_dirty);
+        RayTraceDebugContext* debug_ctx, bool wants_debug_viz, RuntimeSceneState& state,
+        const Transform3D& transform, IPLSceneType scene_type, IPLEmbreeDevice embree, IPLRadeonRaysDevice radeon);
 
-    void clear_static_scenes(IPLScene scene, RayTraceDebugContext* debug_ctx,
-        std::vector<IPLStaticMesh>& runtime_meshes, int& runtime_tri_count,
-        std::vector<int>& runtime_debug_ids, int* global_triangle_count, std::atomic<bool>* scene_dirty);
+    void clear_static_scenes(IPLScene scene, RayTraceDebugContext* debug_ctx, RuntimeSceneState& state);
 
     Error export_static_scene_to_asset(Node* scene_root, const String& path);
+    /// Export static ResonanceGeometry from scene to OBJ+MTL (iplSceneSaveOBJ). Path without extension, e.g. "res://debug/scene".
+    Error export_static_scene_to_obj(Node* scene_root, const String& file_base_name);
     int64_t get_static_scene_hash(Node* scene_root, std::function<uint64_t(const PackedByteArray&)> hash_fn);
 
 private:
     static void collect_static_geometry_recursive(Node* node, std::vector<ResonanceGeometry*>& out);
     static void collect_static_mesh_data(Node* scene_root, std::vector<IPLVector3>& out_vertices,
         std::vector<IPLTriangle>& out_triangles, std::vector<IPLint32>* out_mat_indices);
-    static int register_asset_debug_geometry(const Ref<ResonanceGeometryAsset>& asset, RayTraceDebugContext* debug_ctx);
+    /// Builds temp context/scene/mesh from mesh data for export. Caller must release temp_mesh, temp_scene, export_context.
+    static bool _build_temp_scene_for_export(std::vector<IPLVector3>& vertices,
+        std::vector<IPLTriangle>& triangles, std::vector<IPLint32>& mat_indices,
+        IPLContext* out_ctx, IPLScene* out_scene, IPLStaticMesh* out_mesh);
+    static int register_asset_debug_geometry(const Ref<ResonanceGeometryAsset>& asset, RayTraceDebugContext* debug_ctx,
+        const Transform3D& transform = Transform3D());
 };
 
 } // namespace godot

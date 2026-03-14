@@ -73,7 +73,9 @@ sources = Glob(build_dir + "*.cpp")
 
 # GDExtension documentation (Godot 4.3+): compile XML doc_classes into the extension
 # so Inspector tooltips work for ResonancePlayer, ResonanceProbeVolume, etc.
-if env.get("target", "template_debug") in ["editor", "template_debug"]:
+# Include for all targets: editor, template_debug, template_release (editor may use any)
+_target = env.get("target", "template_debug")
+if _target in ["editor", "template_debug", "template_release"]:
 	try:
 		os.makedirs("src/gen", exist_ok=True)
 		doc_xml = Glob("audio_resonance_tool/addons/nexus_resonance/doc_classes/*.xml")
@@ -94,7 +96,7 @@ if build_tests:
     env_test = env.Clone()
     env_test.Replace(LIBS=[], LIBPATH=[])
     env_test.Append(CPPPATH=["src", "src/lib/catch2"])
-    test_sources = ["src/test/test_main.cpp", "src/test/test_ring_buffer.cpp", "src/test/test_volume_ramp.cpp"]
+    test_sources = ["src/test/test_main.cpp", "src/test/test_ring_buffer.cpp", "src/test/test_volume_ramp.cpp", "src/test/test_resonance_hash.cpp", "src/test/test_handle_manager.cpp", "src/test/test_ipl_guard.cpp"]
     test_dir = "build/tests"
     test_exe = env_test.Program(os.path.join(test_dir, "nexus_resonance_tests"), test_sources)
     env.Alias("test", test_exe)

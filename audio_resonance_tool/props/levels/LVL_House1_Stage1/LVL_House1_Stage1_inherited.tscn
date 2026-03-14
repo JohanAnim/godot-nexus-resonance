@@ -1,0 +1,34 @@
+[gd_scene format=3 uid="uid://dhmgnr0qkxueu"]
+
+[ext_resource type="PackedScene" uid="uid://b0oqsnd25bf04" path="res://props/levels/LVL_House1_Stage1/LVL_House1_Stage1.gltf" id="1_7r8i7"]
+[ext_resource type="PackedScene" uid="uid://dm6vwcc40cic2" path="res://props/assets/SM_Door/SM_Door_wrapper.tscn" id="3_3bxqh"]
+[ext_resource type="AudioStream" uid="uid://k7s3setvfal3" path="res://sounds/door_open_rand.tres" id="4_mykql"]
+[ext_resource type="AudioStream" uid="uid://b0hm5phg5mvie" path="res://sounds/door_close_rand.tres" id="5_eg3pf"]
+[ext_resource type="PackedScene" uid="uid://dn5at3yftolx" path="res://props/assets/SM_Radio/SM_Radio_inherited.tscn" id="5_mykql"]
+[ext_resource type="PackedScene" uid="uid://cy4w34lvj2tnt" path="res://props/assets/SM_kommode/SM_kommode_inherited.tscn" id="6_eg3pf"]
+
+[node name="LVL_House1_Stage1" unique_id=673147672 instance=ExtResource("1_7r8i7")]
+
+[node name="SM_Door" parent="." index="63" unique_id=515095650 instance=ExtResource("3_3bxqh")]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, -6.542536, 0, 2.8700166)
+sound_open = ExtResource("4_mykql")
+sound_close = ExtResource("5_eg3pf")
+door_forward_axis = Vector3(-1, 0, 0)
+
+[node name="SM_Door2" parent="." index="64" unique_id=1543103226 instance=ExtResource("3_3bxqh")]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 8.495487, 0, 6.8611045)
+sound_open = ExtResource("4_mykql")
+sound_close = ExtResource("5_eg3pf")
+door_forward_axis = Vector3(-1, 0, 0)
+
+[node name="SM_Door3" parent="." index="65" unique_id=1511910706 instance=ExtResource("3_3bxqh")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.353385, 0, 8.955065)
+sound_open = ExtResource("4_mykql")
+sound_close = ExtResource("5_eg3pf")
+door_forward_axis = Vector3(-1, 0, 0)
+
+[node name="SM_Radio" parent="." index="66" unique_id=1573865946 instance=ExtResource("5_mykql")]
+transform = Transform3D(0.77549577, 0, 0.63135284, 0, 1, 0, -0.63135284, 0, 0.77549577, 7.7723975, 0.9460759, 1.5112255)
+
+[node name="SM_kommode" parent="." index="67" unique_id=1654474364 instance=ExtResource("6_eg3pf")]
+transform = Transform3D(0.95046693, 0, 0.31082582, 0, 1, 0, -0.31082582, 0, 0.95046693, 7.8302903, 0, 1.4746661)

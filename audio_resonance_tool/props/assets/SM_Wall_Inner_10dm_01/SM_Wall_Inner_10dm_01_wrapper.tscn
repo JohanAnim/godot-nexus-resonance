@@ -1,0 +1,24 @@
+[gd_scene format=3 uid="uid://gpjkd75a4bn2"]
+
+[ext_resource type="PackedScene" uid="uid://dt6l5u4k0f8ys" path="res://props/assets/SM_Wall_Inner_10dm_01/SM_Wall_Inner_10dm_01.gltf" id="1_72mdq"]
+[ext_resource type="ResonanceMaterial" uid="uid://rb8c736kvibo" path="res://addons/nexus_resonance/materials/brick.tres" id="2_fb64a"]
+[ext_resource type="ArrayMesh" uid="uid://b67dqn82kyj18" path="res://props/assets/SM_Wall_Inner_10dm_01/SM_Wall_Inner_10dm_01_reso.res" id="3_l72rp"]
+
+[node name="SM_Wall_Inner_10dm_01" type="Node3D" unique_id=900190379]
+
+[node name="SM_Wall_Inner_10dm_01" type="StaticBody3D" parent="." unique_id=1112606937 instance=ExtResource("1_72mdq")]
+collision_mask = 131
+metadata/_nexus_export_type = "ASSET"
+metadata/_nexus_gltf_path = "res://props/assets/SM_Wall_Inner_10dm_01/SM_Wall_Inner_10dm_01.gltf"
+metadata/nexus_resonance_nodes = [{
+"discard_mesh": true,
+"material_path": "res://addons/nexus_resonance/materials/brick.tres",
+"mesh_path": "res://props/assets/SM_Wall_Inner_10dm_01/SM_Wall_Inner_10dm_01_reso.res",
+"node_name": "SM_Wall_Inner_10dm_01_reso",
+"transform_str": "Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)",
+"type": "RESONANCE_STATIC"
+}]
+
+[node name="SM_Wall_Inner_10dm_01_reso" type="ResonanceStaticGeometry" parent="SM_Wall_Inner_10dm_01" unique_id=2037673462]
+material = ExtResource("2_fb64a")
+geometry_override = ExtResource("3_l72rp")

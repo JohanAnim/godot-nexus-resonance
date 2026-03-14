@@ -21,6 +21,7 @@ namespace godot {
         Ref<Mesh> geometry_override;
         bool dynamic_object = false;
         bool show_geometry_override_in_viewport = false;
+        bool export_all_children = false;
 
         MeshInstance3D* viz_geometry_override = nullptr;  // Editor-only: shows geometry_override in viewport
 
@@ -50,6 +51,9 @@ namespace godot {
         ResonanceGeometry();
         ~ResonanceGeometry();
 
+        ResonanceGeometry(const ResonanceGeometry&) = delete;
+        ResonanceGeometry(ResonanceGeometry&&) = delete;
+
         void _ready() override;
         void _exit_tree() override;
 
@@ -74,6 +78,10 @@ namespace godot {
 
         void set_show_geometry_override_in_viewport(bool p_show);
         bool is_show_geometry_override_in_viewport() const;
+
+        /// When true, child ResonanceGeometry nodes are included during static scene export. No effect for dynamic objects.
+        void set_export_all_children(bool p_export);
+        bool get_export_all_children() const;
 
         void _update_viz_geometry_override();  // Editor-only: show geometry_override in viewport
 

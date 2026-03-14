@@ -1,18 +1,16 @@
 #include "resonance_processor_ambisonic.h"
-#include <godot_cpp/variant/utility_functions.hpp>
+#include "resonance_log.h"
 #include <cstring>
 #include <vector>
 
 namespace godot {
-
-    ResonanceAmbisonicProcessor::ResonanceAmbisonicProcessor() {}
 
     ResonanceAmbisonicProcessor::~ResonanceAmbisonicProcessor() {
         cleanup();
     }
 
     void ResonanceAmbisonicProcessor::initialize(IPLContext p_context, int p_sample_rate, int p_frame_size, int p_order, bool p_rotation_enabled) {
-        if (is_initialized) return;
+        if (init_flags != AmbisonicInitFlags::NONE) return;
 
         context = p_context;
         frame_size = p_frame_size;
@@ -31,9 +29,11 @@ namespace godot {
             IPLAmbisonicsRotationEffectSettings rotSettings{};
             rotSettings.maxOrder = ambisonic_order;
             IPLerror rot_status = iplAmbisonicsRotationEffectCreate(context, &audioSettings, &rotSettings, &rotation_effect);
-            if (rot_status != IPL_STATUS_SUCCESS) {
-                UtilityFunctions::push_error("Nexus Resonance: iplAmbisonicsRotationEffectCreate failed.");
-                return;
+            if (rot_status == IPL_STATUS_SUCCESS) {
+                init_flags = init_flags | AmbisonicInitFlags::ROTATION;
+            }
+            else {
+                ResonanceLog::error("ResonanceAmbisonicProcessor: iplAmbisonicsRotationEffectCreate failed.");
             }
         }
 
@@ -45,36 +45,33 @@ namespace godot {
 
         IPLerror dec_status = iplAmbisonicsDecodeEffectCreate(context, &audioSettings, &decSettings, &ambisonics_dec_effect);
         if (dec_status != IPL_STATUS_SUCCESS) {
-            UtilityFunctions::push_error("Nexus Resonance: iplAmbisonicsDecodeEffectCreate failed.");
-            if (rotation_effect) {
-                iplAmbisonicsRotationEffectRelease(&rotation_effect);
-                rotation_effect = nullptr;
-            }
+            ResonanceLog::error("ResonanceAmbisonicProcessor: iplAmbisonicsDecodeEffectCreate failed.");
+            cleanup();
             return;
         }
+        init_flags = init_flags | AmbisonicInitFlags::DECODE;
 
         IPLerror buf_status = iplAudioBufferAllocate(context, num_channels, frame_size, &sa_in_buffer);
         if (buf_status != IPL_STATUS_SUCCESS) {
-            UtilityFunctions::push_error("Nexus Resonance: Ambisonic buffer allocation failed.");
+            ResonanceLog::error("ResonanceAmbisonicProcessor: Ambisonic buffer allocation failed.");
             cleanup();
             return;
         }
         buf_status = iplAudioBufferAllocate(context, num_channels, frame_size, &sa_rotated_buffer);
         if (buf_status != IPL_STATUS_SUCCESS) {
-            UtilityFunctions::push_error("Nexus Resonance: Ambisonic rotated buffer allocation failed.");
+            ResonanceLog::error("ResonanceAmbisonicProcessor: Ambisonic rotated buffer allocation failed.");
             cleanup();
             return;
         }
-
-        is_initialized = true;
+        init_flags = init_flags | AmbisonicInitFlags::BUFFERS;
     }
 
     void ResonanceAmbisonicProcessor::cleanup() {
         if (rotation_effect) iplAmbisonicsRotationEffectRelease(&rotation_effect);
         if (ambisonics_dec_effect) iplAmbisonicsDecodeEffectRelease(&ambisonics_dec_effect);
         if (context) {
-            iplAudioBufferFree(context, &sa_in_buffer);
-            iplAudioBufferFree(context, &sa_rotated_buffer);
+            if (sa_in_buffer.data) iplAudioBufferFree(context, &sa_in_buffer);
+            if (sa_rotated_buffer.data) iplAudioBufferFree(context, &sa_rotated_buffer);
         }
         memset(&sa_in_buffer, 0, sizeof(sa_in_buffer));
         memset(&sa_rotated_buffer, 0, sizeof(sa_rotated_buffer));
@@ -82,22 +79,37 @@ namespace godot {
         rotation_effect = nullptr;
         ambisonics_dec_effect = nullptr;
         context = nullptr;
-        is_initialized = false;
+        init_flags = AmbisonicInitFlags::NONE;
     }
 
     void ResonanceAmbisonicProcessor::process(const std::vector<float>& input_data, IPLAudioBuffer& out_buffer,
         const IPLCoordinateSpace3& listener_orient) {
 
-        if (!is_initialized || !ambisonics_dec_effect || !out_buffer.data) {
-            // Silence (with null checks to avoid crash on unallocated buffer)
-            for (int i = 0; i < out_buffer.numChannels && out_buffer.data && out_buffer.data[i]; i++) {
-                memset(out_buffer.data[i], 0, frame_size * sizeof(float));
+        // InitFlags guard: only process when fully initialized
+        // Passthrough fallback: when init failed, pass W (omnidirectional) to stereo instead of silence
+        bool init_ok = (init_flags & AmbisonicInitFlags::DECODE) && (init_flags & AmbisonicInitFlags::BUFFERS) && ambisonics_dec_effect && out_buffer.data;
+        if (!init_ok) {
+            int num_channels = (ambisonic_order + 1) * (ambisonic_order + 1);
+            size_t required = (size_t)frame_size * num_channels;
+            if (input_data.size() >= required && out_buffer.data && out_buffer.numChannels >= 2 &&
+                out_buffer.data[0] && out_buffer.data[1]) {
+                // Passthrough: decode W channel (index 0) to stereo (1/sqrt(2) for power preservation)
+                for (int i = 0; i < frame_size; i++) {
+                    float w = input_data[i * num_channels + 0];
+                    out_buffer.data[0][i] = w * resonance::kAmbisonicWChannelScale;
+                    out_buffer.data[1][i] = w * resonance::kAmbisonicWChannelScale;
+                }
+            }
+            else {
+                for (int i = 0; i < out_buffer.numChannels && out_buffer.data && out_buffer.data[i]; i++) {
+                    memset(out_buffer.data[i], 0, frame_size * sizeof(float));
+                }
             }
             return;
         }
 
-        // 1. Deinterleave Input (std::vector flat -> IPLAudioBuffer 4ch)
-        // Input data is expected to be 4 channels interleaved: [W, Y, Z, X] (Ambisonics B-Format)
+        // 1. Deinterleave Input (std::vector flat -> IPLAudioBuffer)
+        // Input data: N channels interleaved (N = (order+1)^2), B-Format [W, Y, Z, X, ...]
         // IPL API has non-const param; input is read-only
         iplAudioBufferDeinterleave(context, const_cast<float*>(input_data.data()), &sa_in_buffer);
 

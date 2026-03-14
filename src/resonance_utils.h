@@ -20,6 +20,14 @@ namespace godot {
             return Vector3(v.x, v.y, v.z);
         }
 
+        /// Normalize vector with minimum length guard to avoid division-by-zero from degenerate transforms.
+        /// Returns fallback when length < min_length.
+        static inline Vector3 safe_unit_vector(const Vector3& v, const Vector3& fallback = Vector3(0, 1, 0)) {
+            real_t len = v.length();
+            if (len < (real_t)1e-3) return fallback;
+            return v / len;
+        }
+
         static inline IPLMatrix4x4 to_ipl_matrix(const Transform3D& tr) {
             IPLMatrix4x4 mat{};
             memset(mat.elements, 0, sizeof(mat.elements));
@@ -53,9 +61,12 @@ namespace godot {
         }
 
         /// Build transform for IPLProbeGenerationParams. Steam Audio expects the cube (-0.5,-0.5,-0.5) to (0.5,0.5,0.5)
-        /// to be mapped to the volume (not (0,0,0)-(1,1,1)). Same as Unity: DrawWireCube(center=0, size=1).
+        /// to be mapped to the volume (not (0,0,0)-(1,1,1)).
         static inline IPLMatrix4x4 create_volume_transform_rotated(const Transform3D& global_transform, const Vector3& extents) {
-            Vector3 size = extents * 2.0f;
+            Vector3 safe_extents(extents.x > 0.0f ? extents.x : 0.001f,
+                                 extents.y > 0.0f ? extents.y : 0.001f,
+                                 extents.z > 0.0f ? extents.z : 0.001f);
+            Vector3 size = safe_extents * 2.0f;
             Basis new_basis = global_transform.basis.orthonormalized();
             new_basis = new_basis.scaled(size);
             Transform3D final_tr;

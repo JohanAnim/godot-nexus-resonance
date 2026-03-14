@@ -2,15 +2,17 @@ extends CanvasLayer
 
 ## Debug overlay that displays Nexus Resonance server state, reflection type, realtime rays,
 ## and a filterable log from ResonanceLogger.
-## Per-source occlusion/reverb data appears as 3D labels above each playing ResonancePlayer
-## when Debug Occlusion or Debug Reflections is enabled on ResonanceRuntime's runtime.
-## NOTE: Reflection ray viz requires Realtime Rays > 0 and debug_reflections in ResonanceRuntimeConfig.
+## Per-source occlusion/reverb data appears as 3D labels above each ResonancePlayer when Debug Occlusion or Debug Reflections is enabled.
+## NOTE: Reflection ray viz requires Realtime Rays > 0 and debug_sources on ResonanceRuntime.
+##
+## This overlay is intentionally runtime-only (game mode). It does not run in the editor.
 
 var _panel: PanelContainer
 var _vbox: VBoxContainer
 var _status_label: RichTextLabel
 var _audio_instrumentation_label: RichTextLabel
 var _reverb_bus_label: RichTextLabel
+var _reverb_reset_btn: Button
 var _log_section: VBoxContainer
 var _log_category_filters: HBoxContainer
 var _log_scroll: ScrollContainer
@@ -23,12 +25,12 @@ const COLOR_WARNING := "#ffcc44"
 const COLOR_ERROR := "#ff6666"
 const COLOR_NEUTRAL := "#dddddd"
 
-func _ready():
+func _ready() -> void:
 	if Engine.is_editor_hint():
 		return
 	_build_ui()
 
-func _build_ui():
+func _build_ui() -> void:
 	layer = 100
 	_panel = PanelContainer.new()
 	var style = StyleBoxFlat.new()
@@ -65,21 +67,28 @@ func _build_ui():
 	_vbox.add_child(fold_audio)
 
 	var fold_reverb = FoldableContainer.new()
-	fold_reverb.title = "Reverb Bus (Convolution)"
+	fold_reverb.title = "Reverb Bus (Crackling Debug)"
 	fold_reverb.folded = true
+	var reverb_vbox = VBoxContainer.new()
+	reverb_vbox.add_theme_constant_override("separation", 4)
 	_reverb_bus_label = RichTextLabel.new()
 	_reverb_bus_label.bbcode_enabled = true
 	_reverb_bus_label.fit_content = true
 	_reverb_bus_label.add_theme_font_size_override("normal_font_size", 11)
 	_reverb_bus_label.text = "(No data)"
-	fold_reverb.add_child(_reverb_bus_label)
+	reverb_vbox.add_child(_reverb_bus_label)
+	_reverb_reset_btn = Button.new()
+	_reverb_reset_btn.text = "Reset counters"
+	_reverb_reset_btn.pressed.connect(_on_reverb_reset_pressed)
+	reverb_vbox.add_child(_reverb_reset_btn)
+	fold_reverb.add_child(reverb_vbox)
 	_vbox.add_child(fold_reverb)
 
 	_log_section = VBoxContainer.new()
 	_log_section.add_theme_constant_override("separation", 4)
 	var fold_log = FoldableContainer.new()
 	fold_log.title = "Log (ResonanceLogger)"
-	fold_log.folded = true
+	fold_log.folded = false
 
 	_log_category_filters = HBoxContainer.new()
 	_log_category_filters.add_theme_constant_override("separation", 4)
@@ -114,12 +123,25 @@ func _build_ui():
 	_panel.custom_minimum_size = Vector2(380, 0)
 	_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 
-func _on_category_toggled(pressed: bool, category: StringName):
+func _on_reverb_reset_pressed() -> void:
+	if Engine.has_singleton("ResonanceServer"):
+		var srv = Engine.get_singleton("ResonanceServer")
+		if srv and srv.has_method("reset_reverb_bus_instrumentation"):
+			srv.reset_reverb_bus_instrumentation()
+	var tree = get_tree()
+	if tree:
+		for p in tree.get_nodes_in_group("resonance_player"):
+			if p.has_method("reset_audio_instrumentation"):
+				p.reset_audio_instrumentation()
+
+func _on_category_toggled(pressed: bool, category: StringName) -> void:
 	if Engine.has_singleton("ResonanceLogger"):
 		Engine.get_singleton("ResonanceLogger").set_category_enabled(category, pressed)
 
-func _process(delta: float):
+func _process(delta: float) -> void:
 	if Engine.is_editor_hint():
+		return
+	if not visible:
 		return
 	if not _panel or not _status_label:
 		return
@@ -132,7 +154,7 @@ func _process(delta: float):
 		_refresh_reverb_bus()
 		_refresh_log()
 
-func _refresh_status():
+func _refresh_status() -> void:
 	if not Engine.has_singleton("ResonanceServer"):
 		_status_label.text = "[color=%s]ResonanceServer not loaded[/color]" % COLOR_ERROR
 		return
@@ -165,7 +187,7 @@ func _refresh_status():
 
 	_status_label.text = "\n".join(parts)
 
-func _refresh_audio_instrumentation():
+func _refresh_audio_instrumentation() -> void:
 	if not _audio_instrumentation_label:
 		return
 	var tree = get_tree()
@@ -182,11 +204,14 @@ func _refresh_audio_instrumentation():
 			block_size = srv.get_audio_frame_size()
 	var parts: PackedStringArray = []
 	for p in players:
+		if p.get("exclude_from_debug") == true:
+			continue
 		if not p.has_method("get_audio_instrumentation"):
 			continue
 		var inst = p.get_audio_instrumentation()
+		var currently_playing = p.has_method("is_playing") and p.is_playing()
 		if inst.is_empty():
-			parts.append("[color=%s]%s: (not playing)[/color]" % [COLOR_NEUTRAL, p.name])
+			parts.append("[color=%s]%s: (no data)[/color]" % [COLOR_NEUTRAL, p.name])
 			continue
 		var input_dropped = inst.get("input_dropped", 0)
 		var output_underrun = inst.get("output_underrun", 0)
@@ -211,12 +236,13 @@ func _refresh_audio_instrumentation():
 			proc_parts.append("block=%d" % block_size)
 		proc_parts.append("zero_in=%d rms=%.4f" % [zero_input, last_rms])
 		var proc_extras = " ".join(proc_parts)
-		parts.append("[color=%s]%s:[/color]" % [COLOR_NEUTRAL, p.name])
+		var idle_suffix = " (idle)" if not currently_playing else ""
+		parts.append("[color=%s]%s%s:[/color]" % [COLOR_NEUTRAL, p.name, idle_suffix])
 		parts.append("  buf: drop=%d underrun=%d blocked=%d | late=%d max_block=%sms psync=%d" % [input_dropped, output_underrun, output_blocked, late_mix, max_ms, param_syncs])
 		parts.append("  proc: pass=%d rmiss=%d silent=%d | %s [color=%s][%s][/color]" % [passthrough, reverb_miss, silent, proc_extras, status_color, "OK" if status_ok else "CHECK"])
 	_audio_instrumentation_label.text = "\n".join(parts)
 
-func _refresh_reverb_bus():
+func _refresh_reverb_bus() -> void:
 	if not _reverb_bus_label:
 		return
 	var srv = Engine.get_singleton("ResonanceServer") if Engine.has_singleton("ResonanceServer") else null
@@ -251,9 +277,27 @@ func _refresh_reverb_bus():
 		ri.get("effect_frames_written", 0),
 		ri.get("effect_output_peak", 0.0),
 	])
+	var fetch_lock = ri.get("fetch_lock_ok", 0)
+	var fetch_cache = ri.get("fetch_cache_hit", 0)
+	var fetch_miss = ri.get("fetch_cache_miss", 0)
+	var fetch_total = fetch_lock + fetch_cache + fetch_miss
+	var fetch_miss_pct = (100.0 * fetch_miss / fetch_total) if fetch_total > 0 else 0.0
+	var fetch_miss_color := COLOR_OK if fetch_miss == 0 else (COLOR_WARNING if fetch_miss_pct < 10.0 else COLOR_ERROR)
+	parts.append("[color=%s]fetch_reverb: lock_ok=%d cache_hit=%d cache_miss=%d (%.1f%%)[/color]" % [
+		fetch_miss_color,
+		fetch_lock,
+		fetch_cache,
+		fetch_miss,
+		fetch_miss_pct,
+	])
 	var runtimes = get_tree().get_nodes_in_group("resonance_runtime")
 	if not runtimes.is_empty():
 		var rt = runtimes[0]
+		if rt.has_method("get_bus_effective"):
+			parts.append("[color=%s]Output: bus=%s (direct+reverb)[/color]" % [
+				COLOR_NEUTRAL,
+				rt.get_bus_effective(),
+			])
 		var ai = rt.get("activator_instrumentation")
 		if ai != null:
 			if ai.is_empty():
@@ -274,13 +318,13 @@ func _refresh_reverb_bus():
 					parts.append("Activator: inactive | reason=%s" % reason)
 	_reverb_bus_label.text = "Reverb Bus (Convolution):\n" + "\n".join(parts)
 
-func _refresh_log():
+func _refresh_log() -> void:
 	if not _log_label or not Engine.has_singleton("ResonanceLogger"):
 		return
 	var logger = Engine.get_singleton("ResonanceLogger")
 	var entries = logger.get_recent_entries(32)
 	if entries.is_empty():
-		_log_label.text = "[color=%s](No log entries)[/color]" % COLOR_NEUTRAL
+		_log_label.text = "[color=%s](No log entries yet. Enable categories above; logs come from init, bake, validation, etc.)[/color]" % COLOR_NEUTRAL
 		return
 	var parts: PackedStringArray = []
 	for i in range(entries.size() - 1, -1, -1):

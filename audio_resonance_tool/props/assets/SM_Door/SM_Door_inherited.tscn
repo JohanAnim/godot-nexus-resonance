@@ -1,0 +1,36 @@
+[gd_scene format=3 uid="uid://dpb46j7ygm2gj"]
+
+[ext_resource type="PackedScene" uid="uid://bfyjyql68j0e" path="res://props/assets/SM_Door/SM_Door.gltf" id="1_ujqkv"]
+[ext_resource type="ResonanceMaterial" uid="uid://duhckwdy7m7rl" path="res://addons/nexus_resonance/materials/wood.tres" id="2_rlnrd"]
+[ext_resource type="ArrayMesh" uid="uid://cylqk5dm4jkbl" path="res://props/assets/SM_Door/SM_Door_reso_1.res" id="3_jdka1"]
+[ext_resource type="Script" uid="uid://5yonvraqmtar" path="res://addons/nexus_resonance/scripts/resonance_player_config.gd" id="4_rlnrd"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_jdka1"]
+radius = 0.17137817
+
+[sub_resource type="Resource" id="Resource_jqpw3"]
+script = ExtResource("4_rlnrd")
+air_absorption_enabled = true
+reflections_type = -1
+perspective_correction_override = -1
+metadata/_custom_type_script = "uid://5yonvraqmtar"
+
+[node name="SM_Door" unique_id=1063899453 instance=ExtResource("1_ujqkv")]
+
+[node name="SM_Door_reso_1" type="ResonanceDynamicGeometry" parent="." index="3" unique_id=1713241533]
+material = ExtResource("2_rlnrd")
+geometry_override = ExtResource("3_jdka1")
+
+[node name="Area3D" type="Area3D" parent="." index="4" unique_id=1854256354]
+collision_layer = 2
+collision_mask = 145
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Area3D" index="0" unique_id=623411587]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2013874, 1.1784176, 0.030481532)
+shape = SubResource("SphereShape3D_jdka1")
+
+[node name="ResonancePlayer" type="ResonancePlayer" parent="." index="5" unique_id=261862142]
+player_config = SubResource("Resource_jqpw3")
+exclude_from_debug = true
+transform = Transform3D(0.99994683, 0, -0.010314714, 0, 1, 0, 0.010314714, 0, 0.99994683, 1.1901327, 1.2954503, 0)
+attenuation_model = 3

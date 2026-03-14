@@ -1,6 +1,7 @@
 [gd_resource type="AudioBusLayout" format=3 uid="uid://dffti6h7rmbbp"]
 
 [sub_resource type="ResonanceAudioEffect" id="ResonanceAudioEffect_b13ln"]
+resource_name = "Resonance"
 
 [resource]
 bus/0/volume_db = 0.06726074

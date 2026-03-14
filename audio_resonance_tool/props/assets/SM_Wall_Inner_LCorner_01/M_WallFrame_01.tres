@@ -1,0 +1,12 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://cd1p0nn5ik8n8"]
+
+[resource]
+resource_name = "wood"
+albedo_color = Color(0.0407, 0.0129, 0.0125, 1.0000)
+metallic = 0.0000
+roughness = 0.5000
+transparency = 3
+cull_mode = 2
+
+metadata/nexus_created = true
+metadata/nexus_material_id = "mat_7ba39fa3-600c-4376-aff8-ce6ccd502ff3"

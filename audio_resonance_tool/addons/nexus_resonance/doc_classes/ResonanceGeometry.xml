@@ -21,6 +21,9 @@
 		<member name="show_geometry_override_in_viewport" type="bool" setter="set_show_geometry_override_in_viewport" getter="is_show_geometry_override_in_viewport" default="false">
 			When true and geometry_override is set, shows the override mesh as a semi-transparent green overlay in the editor viewport. Disable to reduce clutter.
 		</member>
+		<member name="export_all_children" type="bool" setter="set_export_all_children" getter="get_export_all_children" default="false">
+			When enabled, geometry of all child nodes (with MeshInstance3D or geometry_override) is exported as acoustic geometry. Same as Steam Audio "Export All Children".
+		</member>
 		<member name="dynamic" type="bool" setter="set_dynamic" getter="is_dynamic" default="false">
 			When true, geometry is updated for moving/rotating objects. Enable path_validation_enabled on ResonancePlayer when using dynamic geometry that can block baked paths.
 		</member>

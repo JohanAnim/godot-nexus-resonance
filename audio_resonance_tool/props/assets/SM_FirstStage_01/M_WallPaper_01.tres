@@ -1,0 +1,12 @@
+[gd_resource type="StandardMaterial3D" load_steps=1 format=3 uid="uid://ad53f2fe451d4094"]
+
+[resource]
+resource_name = "concrete"
+albedo_color = Color(0.7002, 0.6756, 0.6564, 1.0000)
+metallic = 0.0000
+roughness = 0.5528
+transparency = 3
+cull_mode = 2
+
+metadata/nexus_created = true
+metadata/nexus_material_id = "mat_59751b64-fe1b-4bf7-b2d9-ba6c90f52e34"

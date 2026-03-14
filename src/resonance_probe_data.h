@@ -17,7 +17,8 @@ namespace godot {
         PackedVector3Array probe_positions;  // Stored at bake time for visualization after restart
         uint32_t bake_params_hash = 0;
         uint32_t pathing_params_hash = 0;       // 0 = not baked
-        uint32_t static_source_params_hash = 0;   // 0 = not baked
+        uint32_t static_scene_params_hash = 0;  // Hash of static geometry asset used at bake; 0 = legacy
+        uint32_t static_source_params_hash = 0;  // 0 = not baked
         uint32_t static_listener_params_hash = 0; // 0 = not baked
         int baked_reflection_type = -1;  // 0=Convolution, 1=Parametric, 2=Hybrid; -1=legacy (both baked)
 
@@ -41,6 +42,9 @@ namespace godot {
         void set_pathing_params_hash(int64_t p_hash);
         int64_t get_pathing_params_hash() const;
 
+        void set_static_scene_params_hash(int64_t p_hash);
+        int64_t get_static_scene_params_hash() const;
+
         void set_static_source_params_hash(int64_t p_hash);
         int64_t get_static_source_params_hash() const;
 
@@ -51,6 +55,8 @@ namespace godot {
         int get_baked_reflection_type() const;
 
         // C++ Helpers for efficient access
+        /// Returns pointer to internal probe data. Valid only during the current call; do not hold across
+        /// set_data() or other mutations – PackedByteArray may reallocate and invalidate the pointer.
         const uint8_t* get_data_ptr() const;
         int64_t get_size() const;
 

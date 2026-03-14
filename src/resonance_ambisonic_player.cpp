@@ -1,12 +1,12 @@
 #include "resonance_ambisonic_player.h"
 #include "resonance_constants.h"
+#include "resonance_log.h"
 #include "resonance_server.h"
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/variant.hpp>
 #include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
-#include <godot_cpp/classes/audio_server.hpp>
 #include <godot_cpp/classes/audio_stream.hpp>
 #include <cstring>
 #include <algorithm>
@@ -48,7 +48,7 @@ void ResonanceAmbisonicInternalPlayback::set_channel_playbacks(const Array& play
     output_ring_l.resize(out_capacity);
     output_ring_r.resize(out_capacity);
 
-    temp_interleaved_input.resize(512 * num_channels);  // Resized to frame_size_ in _lazy_init
+    temp_interleaved_input.resize(static_cast<size_t>(resonance::kGodotDefaultFrameSize) * static_cast<size_t>(num_channels));  // Resized to frame_size_ in _lazy_init
 }
 
 void ResonanceAmbisonicInternalPlayback::update_parameters(const AmbisonicPlaybackParameters& p_params) {
@@ -65,8 +65,11 @@ void ResonanceAmbisonicInternalPlayback::_sync_params() {
 
 void ResonanceAmbisonicInternalPlayback::_cleanup_steam_audio() {
     processor.cleanup();
-    if (context) iplAudioBufferFree(context, &sa_out_buffer);
+    if (context && sa_out_buffer.data) {
+        iplAudioBufferFree(context, &sa_out_buffer);
+    }
     memset(&sa_out_buffer, 0, sizeof(sa_out_buffer));
+    context = nullptr;
     is_initialized = false;
 
     input_ring.clear();
@@ -74,7 +77,7 @@ void ResonanceAmbisonicInternalPlayback::_cleanup_steam_audio() {
     output_ring_r.clear();
 }
 
-void ResonanceAmbisonicInternalPlayback::_lazy_init_steam_audio(int ignored_rate) {
+void ResonanceAmbisonicInternalPlayback::_lazy_init_steam_audio() {
     ResonanceServer* srv = ResonanceServer::get_singleton();
     if (!srv || !srv->is_initialized()) return;
 
@@ -91,7 +94,7 @@ void ResonanceAmbisonicInternalPlayback::_lazy_init_steam_audio(int ignored_rate
     iplAudioBufferAllocate(context, 2, frame_size_, &sa_out_buffer);
 
     is_initialized = true;
-    UtilityFunctions::print("Nexus Resonance: Ambisonic DSP Initialized (Order: ", ambisonic_order, ").");
+    ResonanceLog::info("Nexus Resonance: Ambisonic DSP Initialized (Order: " + String::num(ambisonic_order) + ").");
 }
 
 void ResonanceAmbisonicInternalPlayback::_process_steam_audio_block() {
@@ -112,7 +115,7 @@ void ResonanceAmbisonicInternalPlayback::_process_steam_audio_block() {
     output_ring_r.write(sa_out_buffer.data[1], frame_size_);
 }
 
-int32_t ResonanceAmbisonicInternalPlayback::_mix(AudioFrame* buffer, double rate_scale, int32_t frames) {
+int32_t ResonanceAmbisonicInternalPlayback::_mix(AudioFrame* buffer, float rate_scale, int32_t frames) {
     if (channel_playbacks.empty()) return 0;
 
     _sync_params();
@@ -137,26 +140,33 @@ int32_t ResonanceAmbisonicInternalPlayback::_mix(AudioFrame* buffer, double rate
 
     // Lazy Init
     if (!is_initialized) {
-        _lazy_init_steam_audio(0);
-        if (!is_initialized) {
-            for (int i = 0; i < samples_read; i++) {
-                float w = channel_bufs[0].size() > (unsigned)i ? channel_bufs[0][i].x : 0.0f;
-                buffer[i].left = w;
-                buffer[i].right = w;
+            _lazy_init_steam_audio();
+            if (!is_initialized) {
+                for (int i = 0; i < samples_read; i++) {
+                    float w = (!channel_bufs[0].is_empty() && channel_bufs[0].size() > (unsigned)i)
+                        ? channel_bufs[0][i].x : 0.0f;
+                    buffer[i].left = w;
+                    buffer[i].right = w;
+                }
+                return samples_read;
             }
-            return samples_read;
         }
-    }
 
-    // 3. Interleave all channels and push to Input Ring
+    // 3. Interleave all channels and push to Input Ring (batch write for efficiency)
+    size_t interleaved_count = static_cast<size_t>(samples_read) * static_cast<size_t>(num_channels);
+    if (temp_interleaved_input.size() < interleaved_count) {
+        temp_interleaved_input.resize(interleaved_count);
+    }
     for (int i = 0; i < samples_read; i++) {
         for (int c = 0; c < num_channels; c++) {
             float sample = (c < (int)channel_bufs.size() && (int)channel_bufs[c].size() > i)
                 ? channel_bufs[c][i].x : 0.0f;
-            if (input_ring.get_available_write() >= 1) {
-                input_ring.write(&sample, 1);
-            }
+            temp_interleaved_input[static_cast<size_t>(i) * static_cast<size_t>(num_channels) + static_cast<size_t>(c)] = sample;
         }
+    }
+    size_t to_write = std::min(interleaved_count, input_ring.get_available_write());
+    if (to_write > 0) {
+        input_ring.write(temp_interleaved_input.data(), to_write);
     }
 
     // 4. Process Steam Audio Blocks
@@ -168,16 +178,20 @@ int32_t ResonanceAmbisonicInternalPlayback::_mix(AudioFrame* buffer, double rate
         }
     }
 
-    // 5. Output
+    // 5. Output (batch read instead of per-sample for efficiency)
     int available = (int)output_ring_l.get_available_read();
     int valid_copy = (samples_read < available) ? samples_read : available;
 
-    for (int i = 0; i < valid_copy; i++) {
-        float l, r;
-        output_ring_l.read(&l, 1);
-        output_ring_r.read(&r, 1);
-        buffer[i].left = l;
-        buffer[i].right = r;
+    if (valid_copy > 0) {
+        size_t copy_size = static_cast<size_t>(valid_copy);
+        if (temp_output_l.size() < copy_size) temp_output_l.resize(copy_size);
+        if (temp_output_r.size() < copy_size) temp_output_r.resize(copy_size);
+        output_ring_l.read(temp_output_l.data(), copy_size);
+        output_ring_r.read(temp_output_r.data(), copy_size);
+        for (int i = 0; i < valid_copy; i++) {
+            buffer[i].left = temp_output_l[i];
+            buffer[i].right = temp_output_r[i];
+        }
     }
 
     for (int i = valid_copy; i < samples_read; i++) {
@@ -203,6 +217,9 @@ bool ResonanceAmbisonicInternalPlayback::_is_playing() const {
 }
 int ResonanceAmbisonicInternalPlayback::_get_loop_count() const {
     return (!channel_playbacks.empty() && channel_playbacks[0].is_valid()) ? channel_playbacks[0]->get_loop_count() : 0;
+}
+double ResonanceAmbisonicInternalPlayback::_get_playback_position() const {
+    return (!channel_playbacks.empty() && channel_playbacks[0].is_valid()) ? channel_playbacks[0]->get_playback_position() : 0.0;
 }
 void ResonanceAmbisonicInternalPlayback::_seek(double position) {
     for (size_t i = 0; i < channel_playbacks.size(); i++) {
@@ -235,6 +252,9 @@ void ResonanceAmbisonicInternalStream::set_stream_x(const Ref<AudioStream>& p_st
 Ref<AudioStream> ResonanceAmbisonicInternalStream::get_stream_x() const { return stream_x; }
 
 double ResonanceAmbisonicInternalStream::_get_length() const {
+    // Length is taken from channel_streams[0] (or stream_w for legacy). All Ambisonic channels
+    // are assumed to have identical length; if they differ, channel 0 is the reference.
+    // Assumption: all Ambisonic channels have the same length (typical for B-format sources).
     if (!channel_streams.is_empty()) {
         Variant elem = channel_streams[0];
         Object* obj = (elem.get_type() == Variant::OBJECT) ? static_cast<Object*>(elem) : nullptr;
@@ -251,8 +271,9 @@ Ref<AudioStreamPlayback> ResonanceAmbisonicInternalStream::_instantiate_playback
     Array streams;
     int order = ambisonic_order;
 
+    // Order is derived from channel count when valid (4/9/16). ambisonic_order property may differ.
     int cs_size = channel_streams.size();
-    if (cs_size == 16 || cs_size == 9 || cs_size == 4) {
+    if (resonance::is_valid_ambisonic_channel_count(cs_size)) {
         order = (cs_size == 16) ? 3 : (cs_size == 9 ? 2 : 1);
         for (int i = 0; i < cs_size; i++) {
             Variant elem = channel_streams[i];
@@ -268,6 +289,22 @@ Ref<AudioStreamPlayback> ResonanceAmbisonicInternalStream::_instantiate_playback
         streams.push_back(stream_y.is_valid() ? stream_y->instantiate_playback() : Ref<AudioStreamPlayback>());
         streams.push_back(stream_z.is_valid() ? stream_z->instantiate_playback() : Ref<AudioStreamPlayback>());
         streams.push_back(stream_x.is_valid() ? stream_x->instantiate_playback() : Ref<AudioStreamPlayback>());
+    } else if (cs_size > 0) {
+        // Invalid channel count (use resonance::is_valid_ambisonic_channel_count). Use closest valid order and pad/truncate.
+        UtilityFunctions::push_warning("Nexus Resonance: channel_streams size ", cs_size, " is invalid (use 4, 9, or 16). Using order 2 (9 channels).");
+        order = 2;
+        int target = 9;
+        for (int i = 0; i < target; i++) {
+            Ref<AudioStreamPlayback> pb;
+            if (i < cs_size) {
+                Variant elem = channel_streams[i];
+                Object* obj = (elem.get_type() == Variant::OBJECT) ? static_cast<Object*>(elem) : nullptr;
+                AudioStream* as = Object::cast_to<AudioStream>(obj);
+                Ref<AudioStream> s = as ? Ref<AudioStream>(as) : Ref<AudioStream>();
+                pb = s.is_valid() ? s->instantiate_playback() : Ref<AudioStreamPlayback>();
+            }
+            streams.push_back(pb);
+        }
     }
 
     if (streams.is_empty()) return playback;
@@ -302,9 +339,6 @@ void ResonanceAmbisonicInternalStream::_bind_methods() {
     ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "stream_x", PROPERTY_HINT_RESOURCE_TYPE, "AudioStream"), "set_stream_x", "get_stream_x");
 }
 
-ResonanceAmbisonicPlayer::ResonanceAmbisonicPlayer() {}
-ResonanceAmbisonicPlayer::~ResonanceAmbisonicPlayer() {}
-
 void ResonanceAmbisonicPlayer::_ready() {
     // If stream is set in editor, we just play.
     // The stream must be a ResonanceAmbisonicInternalStream resource.
@@ -327,6 +361,12 @@ void ResonanceAmbisonicPlayer::_process(double delta) {
         listener_orient.ahead = { forward.x, forward.y, forward.z };
         listener_orient.up = { up.x, up.y, up.z };
         listener_orient.right = { right.x, right.y, right.z };
+    } else {
+        // Fallback: use identity orientation when no viewport/camera (avoids degenerate coord system)
+        listener_orient.origin = { 0,0,0 };
+        listener_orient.ahead = { 0,0,-1 };
+        listener_orient.up = { 0,1,0 };
+        listener_orient.right = { 1,0,0 };
     }
 
     AmbisonicPlaybackParameters params;

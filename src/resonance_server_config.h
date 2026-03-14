@@ -5,6 +5,7 @@
 #include <godot_cpp/variant/variant.hpp>
 #include <functional>
 
+#include "resonance_constants.h"
 #include "resonance_sofa_asset.h"
 
 namespace godot {
@@ -14,7 +15,7 @@ namespace godot {
 struct ResonanceServerConfig {
     // Audio
     int sample_rate = 48000;
-    int frame_size = 512;
+    int frame_size = resonance::kGodotDefaultFrameSize;
     int ambisonic_order = 1;
     float max_reverb_duration = 2.0f;
 
@@ -29,6 +30,8 @@ struct ResonanceServerConfig {
 
     // Reflection
     int reflection_type = 0;
+    /// When player reflections_type is Use Global: 0=Baked, 1=Realtime
+    int default_reflections_mode = 0;
     float hybrid_reverb_transition_time = 1.0f;
     float hybrid_reverb_overlap_percent = 0.25f;
     int transmission_type = 0;
@@ -47,12 +50,14 @@ struct ResonanceServerConfig {
     float pathing_vis_range = 100.0f;
     bool pathing_normalize_eq = true;
 
-    // OpenCL / Radeon Rays
-    bool use_radeon_rays = false;
-    int opencl_device_type = 0;
+    // Ray tracer / OpenCL / Radeon Rays
+    /// 0=Default (built-in Phonon), 1=Embree (Intel, faster CPU), 2=Radeon Rays (GPU)
+    int scene_type = 1;
+    int opencl_device_type = 0;  // 0=GPU, 1=CPU, 2=Any
     int opencl_device_index = 0;
 
     // Context
+    /// IPL validation layer: when true, Steam Audio validates API params (can warn on reverbTimes=0, eqCoeffs>1).
     bool context_validation = false;
     int context_simd_level = -1;
 
@@ -78,6 +83,7 @@ struct ResonanceServerConfig {
     float simulation_update_interval = 0.1f;
 
     /// Apply config from Dictionary. Optional get_bake_pathing_param used for pathing_vis_* fallback when keys missing.
+    /// config_int truncates FLOAT to int; use integer values from GDScript/JSON for exact results.
     void apply(const Dictionary& config,
         std::function<float(const char*, float)> get_bake_pathing_param = nullptr);
 

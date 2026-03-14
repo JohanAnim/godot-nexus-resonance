@@ -1,4 +1,5 @@
 #include "resonance_geometry.h"
+#include "resonance_constants.h"
 #include "resonance_debug_log.h"
 #include "resonance_log.h"
 #include "resonance_server.h"
@@ -18,9 +19,11 @@ using namespace godot;
 
 static IPLMaterial get_default_ipl_material() {
     IPLMaterial m{};
-    m.absorption[0] = 0.1f; m.absorption[1] = 0.2f; m.absorption[2] = 0.1f;
-    m.scattering = 0.5f;
-    m.transmission[0] = 0.1f; m.transmission[1] = 0.1f; m.transmission[2] = 0.1f;
+    m.absorption[0] = resonance::kSceneExportAbsorptionLow;
+    m.absorption[1] = resonance::kSceneExportAbsorptionMid;
+    m.absorption[2] = resonance::kSceneExportAbsorptionHigh;
+    m.scattering = resonance::kSceneExportScattering;
+    m.transmission[0] = m.transmission[1] = m.transmission[2] = resonance::kSceneExportTransmission;
     return m;
 }
 
@@ -44,7 +47,7 @@ static bool parse_mesh_to_ipl(const Ref<Mesh>& mesh, const Transform3D& xform,
             out_vertices.push_back({ vec.x, vec.y, vec.z });
         }
 
-        if (indices.size() > 0) {
+        if (!indices.is_empty()) {
             for (int idx = 0; idx < indices.size(); idx += 3) {
                 if (idx + 2 >= (int)indices.size()) break;
                 out_triangles.push_back({
@@ -84,10 +87,8 @@ void ResonanceGeometry::_ready() {
 }
 
 void ResonanceGeometry::_exit_tree() {
-    if (viz_geometry_override) {
-        viz_geometry_override->queue_free();
-        viz_geometry_override = nullptr;
-    }
+    // Godot frees child nodes automatically when parent is removed; do not queue_free.
+    viz_geometry_override = nullptr;
     // Skip clear in editor: modifying IPL scene during scene switch (after bake) can crash.
     // Destructor still runs _clear_meshes when node is freed.
     if (Engine::get_singleton()->is_editor_hint()) {
@@ -148,6 +149,16 @@ bool ResonanceGeometry::is_show_geometry_override_in_viewport() const {
     return show_geometry_override_in_viewport;
 }
 
+void ResonanceGeometry::set_export_all_children(bool p_export) {
+    if (export_all_children != p_export) {
+        export_all_children = p_export;
+    }
+}
+
+bool ResonanceGeometry::get_export_all_children() const {
+    return export_all_children;
+}
+
 void ResonanceGeometry::_update_viz_geometry_override() {
     if (!Engine::get_singleton()->is_editor_hint()) return;
 
@@ -165,7 +176,7 @@ void ResonanceGeometry::_update_viz_geometry_override() {
         viz_geometry_override->set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
         Ref<StandardMaterial3D> mat;
         mat.instantiate();
-        mat->set_albedo(Color(0.2f, 0.9f, 0.2f, 0.5f));
+        mat->set_albedo(Color(resonance::kGeometryOverrideVizR, resonance::kGeometryOverrideVizG, resonance::kGeometryOverrideVizB, resonance::kGeometryOverrideVizA));
         mat->set_transparency(BaseMaterial3D::TRANSPARENCY_ALPHA);
         mat->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
         viz_geometry_override->set_material_override(mat);
@@ -185,7 +196,7 @@ void ResonanceGeometry::_clear_meshes_impl() {
 
     // Clean up Steam Audio resources. Caller must hold simulation_mutex when server is valid.
     if (server && server->is_initialized()) {
-        for (auto mesh : static_meshes) {
+        for (auto& mesh : static_meshes) {
             iplStaticMeshRemove(mesh, server->get_scene_handle());
             iplStaticMeshRelease(&mesh);
         }
@@ -202,7 +213,7 @@ void ResonanceGeometry::_clear_meshes_impl() {
     }
     else {
         // Fallback cleanup (just release handles, don't touch scene)
-        for (auto mesh : static_meshes) iplStaticMeshRelease(&mesh);
+        for (auto& mesh : static_meshes) iplStaticMeshRelease(&mesh);
         if (instanced_mesh) iplInstancedMeshRelease(&instanced_mesh);
     }
 
@@ -219,9 +230,8 @@ void ResonanceGeometry::_clear_meshes_impl() {
 void ResonanceGeometry::_clear_meshes() {
     ResonanceServer* server = ResonanceServer::get_singleton();
     if (server && server->is_initialized()) {
-        server->lock_simulation();
+        auto lock = server->scoped_simulation_lock();
         _clear_meshes_impl();
-        server->unlock_simulation();
     }
     else {
         _clear_meshes_impl();
@@ -245,7 +255,7 @@ void ResonanceGeometry::_create_meshes() {
     Node3D* node3d = Object::cast_to<Node3D>(parent);
     if (!node3d || !node3d->is_visible_in_tree()) return;
 
-    // Unity-style: static geometry is in the exported scene; skip when ResonanceStaticScene provides it
+    // static geometry is in the exported scene; skip when ResonanceStaticScene provides it
     if (!dynamic_object && !Engine::get_singleton()->is_editor_hint()) {
         Node* root = this;
         while (root->get_parent()) root = root->get_parent();
@@ -271,7 +281,7 @@ void ResonanceGeometry::_create_meshes() {
     Transform3D xform = dynamic_object ? Transform3D() : node3d->get_global_transform();
 
     if (use_asset_path) {
-        server->lock_simulation();
+        auto lock = server->scoped_simulation_lock();
         _clear_meshes_impl();
         // --- Load from serialized asset (iplStaticMeshLoad) ---
         IPLSceneSettings sceneSettings{};
@@ -280,7 +290,6 @@ void ResonanceGeometry::_create_meshes() {
 
         if (iplSceneCreate(server->get_context_handle(), &sceneSettings, &sub_scene) != IPL_STATUS_SUCCESS) {
             ResonanceLog::error("ResonanceGeometry: iplSceneCreate failed (asset path).");
-            server->unlock_simulation();
             return;
         }
 
@@ -296,7 +305,6 @@ void ResonanceGeometry::_create_meshes() {
             ResonanceLog::error("ResonanceGeometry: iplSerializedObjectCreate failed.");
             iplSceneRelease(&sub_scene);
             sub_scene = nullptr;
-            server->unlock_simulation();
             return;
         }
 
@@ -308,7 +316,6 @@ void ResonanceGeometry::_create_meshes() {
             ResonanceLog::error("ResonanceGeometry: iplStaticMeshLoad failed.");
             iplSceneRelease(&sub_scene);
             sub_scene = nullptr;
-            server->unlock_simulation();
             return;
         }
 
@@ -337,7 +344,6 @@ void ResonanceGeometry::_create_meshes() {
             iplInstancedMeshAdd(instanced_mesh, server->get_scene_handle());
             triangle_count = mesh_asset->get_triangle_count();
         }
-        server->unlock_simulation();
     }
     else {
         // --- Runtime mesh parsing: parse outside lock to reduce lock duration ---
@@ -359,8 +365,9 @@ void ResonanceGeometry::_create_meshes() {
         mesh_settings.materials = &mat_settings;
         mesh_settings.materialIndices = ipl_mat_indices.data();
 
-        server->lock_simulation();
-        _clear_meshes_impl();
+        {
+            auto lock = server->scoped_simulation_lock();
+            _clear_meshes_impl();
 
         if (dynamic_object) {
             IPLSceneSettings sceneSettings{};
@@ -417,7 +424,7 @@ void ResonanceGeometry::_create_meshes() {
             debug_mesh_id = server->register_debug_mesh(ipl_vertices, ipl_triangles, ipl_mat_indices.data(), &ipl_xform, &mat_settings);
             resonance::debug_log_raw("resonance_geometry:register_debug", "mesh_registered", triangle_count, debug_mesh_id);
         }
-        server->unlock_simulation();
+        }
     }
 
     if (triangle_count > 0) {
@@ -437,9 +444,10 @@ void ResonanceGeometry::_update_dynamic_transform() {
 
     IPLMatrix4x4 mat = ResonanceUtils::to_ipl_matrix(node3d->get_global_transform());
 
-    server->lock_simulation();
-    iplInstancedMeshUpdateTransform(instanced_mesh, server->get_scene_handle(), mat);
-    server->unlock_simulation();
+    {
+        auto lock = server->scoped_simulation_lock();
+        iplInstancedMeshUpdateTransform(instanced_mesh, server->get_scene_handle(), mat);
+    }
 
     // Notify dirty (0 delta means count didn't change, but position did -> needs Commit)
     server->notify_geometry_changed(0);
@@ -497,11 +505,12 @@ Error ResonanceGeometry::export_dynamic_mesh_to_asset(const String& p_path) {
     mesh_settings.materials = &mat_settings;
     mesh_settings.materialIndices = ipl_mat_indices.data();
 
-    // Standalone export: create minimal Phonon context/scene (like Steam Audio Unity - no ResonanceServer required)
+    // Standalone export: create minimal Phonon context/scene (no ResonanceServer required)
     IPLContext export_context = nullptr;
     IPLContextSettings ctx_settings{};
     ctx_settings.version = STEAMAUDIO_VERSION;
     if (iplContextCreate(&ctx_settings, &export_context) != IPL_STATUS_SUCCESS) {
+        ResonanceLog::error("ResonanceGeometry: iplContextCreate failed (export_dynamic_mesh_to_asset).");
         return ERR_CANT_CREATE;
     }
 
@@ -510,12 +519,14 @@ Error ResonanceGeometry::export_dynamic_mesh_to_asset(const String& p_path) {
 
     IPLScene temp_scene = nullptr;
     if (iplSceneCreate(export_context, &scene_settings, &temp_scene) != IPL_STATUS_SUCCESS) {
+        ResonanceLog::error("ResonanceGeometry: iplSceneCreate failed (export_dynamic_mesh_to_asset).");
         iplContextRelease(&export_context);
         return ERR_CANT_CREATE;
     }
 
     IPLStaticMesh temp_mesh = nullptr;
     if (iplStaticMeshCreate(temp_scene, &mesh_settings, &temp_mesh) != IPL_STATUS_SUCCESS) {
+        ResonanceLog::error("ResonanceGeometry: iplStaticMeshCreate failed (export_dynamic_mesh_to_asset).");
         iplSceneRelease(&temp_scene);
         iplContextRelease(&export_context);
         return ERR_CANT_CREATE;
@@ -527,6 +538,7 @@ Error ResonanceGeometry::export_dynamic_mesh_to_asset(const String& p_path) {
     IPLSerializedObjectSettings serial_settings{};
     IPLSerializedObject serial_obj = nullptr;
     if (iplSerializedObjectCreate(export_context, &serial_settings, &serial_obj) != IPL_STATUS_SUCCESS) {
+        ResonanceLog::error("ResonanceGeometry: iplSerializedObjectCreate failed (export_dynamic_mesh_to_asset).");
         iplStaticMeshRelease(&temp_mesh);
         iplSceneRelease(&temp_scene);
         iplContextRelease(&export_context);
@@ -538,6 +550,7 @@ Error ResonanceGeometry::export_dynamic_mesh_to_asset(const String& p_path) {
     IPLsize size = iplSerializedObjectGetSize(serial_obj);
     IPLbyte* data = iplSerializedObjectGetData(serial_obj);
     if (!data || size == 0) {
+        ResonanceLog::error("ResonanceGeometry: iplStaticMeshSave produced no data (export_dynamic_mesh_to_asset).");
         iplSerializedObjectRelease(&serial_obj);
         iplStaticMeshRelease(&temp_mesh);
         iplSceneRelease(&temp_scene);
@@ -605,15 +618,21 @@ void ResonanceGeometry::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_geometry_override"), &ResonanceGeometry::get_geometry_override);
     ClassDB::bind_method(D_METHOD("set_show_geometry_override_in_viewport", "p_show"), &ResonanceGeometry::set_show_geometry_override_in_viewport);
     ClassDB::bind_method(D_METHOD("is_show_geometry_override_in_viewport"), &ResonanceGeometry::is_show_geometry_override_in_viewport);
+    ClassDB::bind_method(D_METHOD("set_export_all_children", "p_export"), &ResonanceGeometry::set_export_all_children);
+    ClassDB::bind_method(D_METHOD("get_export_all_children"), &ResonanceGeometry::get_export_all_children);
     ClassDB::bind_method(D_METHOD("export_dynamic_mesh_to_asset", "p_path"), &ResonanceGeometry::export_dynamic_mesh_to_asset);
 
     ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "ResonanceMaterial"), "set_material", "get_material");
     ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "mesh_asset", PROPERTY_HINT_RESOURCE_TYPE, "ResonanceGeometryAsset"), "set_mesh_asset", "get_mesh_asset");
     ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "geometry_override", PROPERTY_HINT_RESOURCE_TYPE, "Mesh"), "set_geometry_override", "get_geometry_override");
     ADD_PROPERTY(PropertyInfo(Variant::BOOL, "show_geometry_override_in_viewport"), "set_show_geometry_override_in_viewport", "is_show_geometry_override_in_viewport");
+    ADD_PROPERTY(PropertyInfo(Variant::BOOL, "export_all_children"), "set_export_all_children", "get_export_all_children");
     ADD_PROPERTY(PropertyInfo(Variant::BOOL, "dynamic"), "set_dynamic", "is_dynamic");
 }
 
 void ResonanceGeometry::_validate_property(PropertyInfo& p_property) const {
     Node3D::_validate_property(p_property);
+    if (p_property.name == StringName("export_all_children") && dynamic_object) {
+        p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+    }
 }

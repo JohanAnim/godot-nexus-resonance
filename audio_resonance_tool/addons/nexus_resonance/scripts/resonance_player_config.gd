@@ -38,8 +38,8 @@ var _air_absorption_enabled: bool = true
 			_air_absorption_enabled = v
 			notify_property_list_changed()
 var _air_absorption_input: int = 0
-## Air absorption source: Simulation = physics-based, User Defined = use low/mid/high sliders.
-@export_enum("Simulation:0", "User Defined:1") var air_absorption_input: int:
+## Air absorption source: Simulation Defined = physics-based, User Defined = use low/mid/high sliders.
+@export_enum("Simulation Defined:0", "User Defined:1") var air_absorption_input: int:
 	get:
 		return _air_absorption_input
 	set(v):
@@ -64,13 +64,35 @@ var _directivity_enabled: bool = false
 		if _directivity_enabled != v:
 			_directivity_enabled = v
 			notify_property_list_changed()
-## Shape: 0 = Omnidirectional, 1 = Dipole (figure-8). Intermediate = blend.
+var _directivity_input: int = 0
+## Directivity source: Simulation Defined = dipole model (weight, power). User Defined = use directivity_value (script-controlled).
+@export_enum("Simulation Defined:0", "User Defined:1") var directivity_input: int:
+	get:
+		return _directivity_input
+	set(v):
+		if _directivity_input != v:
+			_directivity_input = v
+			notify_property_list_changed()
+## Shape: 0 = Omnidirectional, 1 = Dipole (figure-8). Intermediate = blend. Only when directivity_input is Simulation.
 @export_range(0.0, 1.0, 0.01) var directivity_weight: float = 0.0
-## Sharpness of the directivity pattern. 0 = broad cone, 4 = narrow beam.
+## Sharpness of the directivity pattern. 0 = broad cone, 4 = narrow beam. Only when directivity_input is Simulation.
 @export_range(0.0, 4.0, 0.1) var directivity_power: float = 1.0
+## Directivity attenuation (0-1). 0 = fully attenuated, 1 = no change. Only when directivity_input is User Defined.
+@export_range(0.0, 1.0, 0.01) var directivity_value: float = 1.0
 
 # --- Output ---
 @export_group("Output")
+## Bus for Direct + Pathing. Use Global = follow ResonanceRuntimeConfig.bus. Custom = use bus_name below.
+## Exported directly (no getter/setter) so Godot reliably serializes it.
+@export_enum("Use Global:-1", "Custom:0") var bus_override: int = -1
+## Bus for Direct + Pathing when bus_override is Custom. Pick from existing buses in Audio Bus Layout.
+@export var bus_name: StringName = &"Master"
+## Reverb bus override. Use Global = follow ResonanceRuntimeConfig.reverb_bus_name. Custom = use reverb_bus_name below. Note: Convolution mode uses a global reverb bus; this applies when per-source reverb routing is supported (e.g. Parametric/Hybrid with separate reverb output).
+## Exported directly (no getter/setter) so Godot reliably serializes it. reverb_bus_name refresh may require re-selecting the resource after change.
+@export_enum("Use Global:-1", "Custom:0") var reverb_bus_override: int = -1
+
+## Bus for reverb output when reverb_bus_override is Custom. Pick from existing buses in Audio Bus Layout.
+@export var reverb_bus_name: StringName = &"ResonanceReverb"
 ## Per-source binaural override. Use Global = follow RuntimeConfig.reverb_binaural. Disabled = panning. Enabled = force HRTF.
 @export_enum("Use Global:-1", "Disabled:0", "Enabled:1") var direct_binaural_override: int = -1
 ## Blend between unspatialized (0) and fully 3D spatialized (1). Diegetic vs. non-diegetic mix.
@@ -80,10 +102,60 @@ var _directivity_enabled: bool = false
 
 # --- Occlusion ---
 @export_group("Occlusion")
+var _occlusion_input: int = 0
+## Occlusion source: Simulation Defined = physics-based raycast. User Defined = use occlusion_value (script-controlled).
+@export_enum("Simulation Defined:0", "User Defined:1") var occlusion_input: int:
+	get:
+		return _occlusion_input
+	set(v):
+		if _occlusion_input != v:
+			_occlusion_input = v
+			notify_property_list_changed()
+## Occlusion attenuation (0-1). 0 = fully occluded, 1 = not occluded. Only when occlusion_input is User Defined.
+@export_range(0.0, 1.0, 0.01) var occlusion_value: float = 1.0
 ## Number of rays per source for volumetric occlusion (1-64). Higher = smoother; lower = less CPU.
 @export_range(1, 64, 1) var occlusion_samples: int = 64
+var _transmission_input: int = 0
+## Transmission source: Simulation Defined = physics-based. User Defined = use transmission low/mid/high (script-controlled).
+@export_enum("Simulation Defined:0", "User Defined:1") var transmission_input: int:
+	get:
+		return _transmission_input
+	set(v):
+		if _transmission_input != v:
+			_transmission_input = v
+			notify_property_list_changed()
+## Low-band transmission (0-1). Only when transmission_input is User Defined.
+@export_range(0.0, 1.0, 0.01) var transmission_low: float = 1.0
+## Mid-band transmission (0-1). Only when transmission_input is User Defined.
+@export_range(0.0, 1.0, 0.01) var transmission_mid: float = 1.0
+## High-band transmission (0-1). Only when transmission_input is User Defined.
+@export_range(0.0, 1.0, 0.01) var transmission_high: float = 1.0
 ## Max surfaces for sound transmission through walls (1-256). Higher = more accuracy; lower = less CPU.
 @export_range(1, 256, 1) var max_transmission_surfaces: int = 32
+
+# --- Reflections (per-source) ---
+@export_group("Reflections")
+var _reflections_type: int = -1
+## Reflections simulation: Use Global = runtime's default_reflections_mode (Baked or Realtime). Realtime = raytracing (requires realtime_rays > 0). Baked Reverb/Static Source/Listener = use baked probe data.
+@export_enum("Use Global:-1", "Realtime:0", "Baked Reverb:1", "Baked Static Source:2", "Baked Static Listener:3") var reflections_type: int:
+	get:
+		return _reflections_type
+	set(v):
+		if _reflections_type != v:
+			_reflections_type = v
+			notify_property_list_changed()
+## When reflections_type is Baked Static Source: reference to the node whose position was baked as static source. Leave empty to use this player's position.
+@export var current_baked_source: NodePath = NodePath()
+## When reflections_type is Baked Static Listener: reference to the node (e.g. listener/camera) whose position was baked. Leave empty to use active listener.
+@export var current_baked_listener: NodePath = NodePath()
+## Enable reflections for this source. Use Global = follow runtime.
+@export_enum("Use Global:-1", "Disabled:0", "Enabled:1") var reflections_enabled: int = -1
+## Enable pathing for this source. Use Global = follow runtime pathing_enabled.
+@export_enum("Use Global:-1", "Disabled:0", "Enabled:1") var pathing_enabled_override: int = -1
+## Apply HRTF to reflections (reverb) for this source. Use Global = follow runtime reverb_binaural.
+@export_enum("Use Global:-1", "Disabled:0", "Enabled:1") var apply_hrtf_to_reflections: int = -1
+## Apply HRTF to pathing for this source. Use Global = follow runtime reverb_binaural.
+@export_enum("Use Global:-1", "Disabled:0", "Enabled:1") var apply_hrtf_to_pathing: int = -1
 
 # --- Pathing ---
 @export_group("Pathing")
@@ -100,8 +172,6 @@ var _directivity_enabled: bool = false
 @export_range(0.0, 10.0, 0.1) var reflections_mix_level: float = 1.0
 ## Volume of pathing (multi-path propagation). Range 0-10. Requires baked pathing data.
 @export_range(0.0, 10.0, 0.1) var pathing_mix_level: float = 1.0
-## Pathing gain multiplier. 1.0 = full level. Range 0-10.
-@export_range(0.0, 10.0, 0.1) var pathing_occ_scale: float = 1.0
 
 # --- Hybrid Reverb ---
 @export_group("Hybrid Reverb")
@@ -129,7 +199,13 @@ var _perspective_correction_override: int = -1
 @export_range(0.5, 2.0, 0.1) var perspective_factor: float = 1.0
 
 func _validate_property(property: Dictionary) -> void:
-	if property.name == "perspective_factor":
+	if property.name == "bus_name":
+		if bus_override == -1:  # Use Global
+			property["usage"] = property["usage"] | PROPERTY_USAGE_READ_ONLY
+	elif property.name == "reverb_bus_name":
+		if reverb_bus_override == -1:  # Use Global
+			property["usage"] = property["usage"] | PROPERTY_USAGE_READ_ONLY
+	elif property.name == "perspective_factor":
 		if perspective_correction_override == 0:  # Disabled
 			property["usage"] = property["usage"] | PROPERTY_USAGE_READ_ONLY
 	elif property.name in ["air_absorption_low", "air_absorption_mid", "air_absorption_high"]:
@@ -138,9 +214,38 @@ func _validate_property(property: Dictionary) -> void:
 	elif property.name == "attenuation_curve":
 		if attenuation_mode != 2:  # Curve
 			property["usage"] = property["usage"] | PROPERTY_USAGE_READ_ONLY
-	elif property.name in ["directivity_weight", "directivity_power"]:
-		if not directivity_enabled:
+	elif property.name == "current_baked_source":
+		if reflections_type != 2:  # Baked Static Source
 			property["usage"] = property["usage"] | PROPERTY_USAGE_READ_ONLY
+	elif property.name == "current_baked_listener":
+		if reflections_type != 3:  # Baked Static Listener
+			property["usage"] = property["usage"] | PROPERTY_USAGE_READ_ONLY
+	elif property.name == "occlusion_value":
+		if occlusion_input != 1:
+			property["usage"] = property["usage"] | PROPERTY_USAGE_READ_ONLY
+	elif property.name in ["transmission_low", "transmission_mid", "transmission_high"]:
+		if transmission_input != 1:
+			property["usage"] = property["usage"] | PROPERTY_USAGE_READ_ONLY
+	elif property.name in ["directivity_weight", "directivity_power"]:
+		if not directivity_enabled or directivity_input != 0:
+			property["usage"] = property["usage"] | PROPERTY_USAGE_READ_ONLY
+	elif property.name == "directivity_value":
+		if not directivity_enabled or directivity_input != 1:
+			property["usage"] = property["usage"] | PROPERTY_USAGE_READ_ONLY
+
+## Returns effective bus for Direct + Pathing. When bus_override is Use Global, returns global_fallback. When Custom, returns bus_name (or global_fallback if empty).
+func get_bus_name_effective(global_fallback: StringName) -> StringName:
+	if bus_override == -1:  # Use Global
+		return global_fallback
+	var custom := bus_name
+	return custom if not str(custom).is_empty() else global_fallback
+
+## Returns effective reverb bus name for this source. When reverb_bus_override is Use Global, returns global_fallback. When Custom, returns reverb_bus_name (or global_fallback if empty).
+func get_reverb_bus_name_effective(global_fallback: StringName) -> StringName:
+	if reverb_bus_override == -1:  # Use Global
+		return global_fallback
+	var custom := reverb_bus_name
+	return custom if not str(custom).is_empty() else global_fallback
 
 ## Creates default player config for sources without one assigned.
 static func create_default() -> ResonancePlayerConfig:

@@ -1,6 +1,7 @@
 #ifndef RESONANCE_AMBISONIC_PLAYER_H
 #define RESONANCE_AMBISONIC_PLAYER_H
 
+#include "resonance_constants.h"
 #include <godot_cpp/classes/audio_stream_player.hpp>
 #include <godot_cpp/classes/audio_stream.hpp>
 #include <godot_cpp/classes/audio_stream_playback.hpp>
@@ -25,9 +26,14 @@ namespace godot {
     class ResonanceAmbisonicInternalPlayback : public AudioStreamPlayback {
         GDCLASS(ResonanceAmbisonicInternalPlayback, AudioStreamPlayback)
 
+    public:
+        ResonanceAmbisonicInternalPlayback(const ResonanceAmbisonicInternalPlayback&) = delete;
+        ResonanceAmbisonicInternalPlayback(ResonanceAmbisonicInternalPlayback&&) = delete;
+        // Assignment implicitly deleted when copy ctor is deleted; explicit decl conflicts with Godot base.
+
     private:
         static const int kMaxAmbisonicChannels = 16; // 3rd Order max
-        int frame_size_ = 512;  // Steam Audio block size from ResonanceServer (256/512/1024)
+        int frame_size_ = resonance::kGodotDefaultFrameSize;  // Steam Audio block size from ResonanceServer
 
         // Playbacks for each Ambisonic channel (4 for 1st, 9 for 2nd, 16 for 3rd order)
         std::vector<Ref<AudioStreamPlayback>> channel_playbacks;
@@ -54,8 +60,11 @@ namespace godot {
 
         // Temp buffer for processing loop
         std::vector<float> temp_interleaved_input;
+        // Temp buffers for batch read from output ring buffers (avoids per-sample memcpy)
+        std::vector<float> temp_output_l;
+        std::vector<float> temp_output_r;
 
-        void _lazy_init_steam_audio(int sampling_rate);
+        void _lazy_init_steam_audio();
         void _cleanup_steam_audio();
         void _process_steam_audio_block();
         void _sync_params();
@@ -68,11 +77,12 @@ namespace godot {
 
         void update_parameters(const AmbisonicPlaybackParameters& p_params);
 
-        virtual int32_t _mix(AudioFrame* buffer, double rate_scale, int32_t frames);
+        virtual int32_t _mix(AudioFrame* buffer, float rate_scale, int32_t frames) override;
         virtual void _start(double from_pos) override;
         virtual void _stop() override;
         virtual bool _is_playing() const override;
         virtual int _get_loop_count() const override;
+        virtual double _get_playback_position() const override;
         virtual void _seek(double position) override;
 
     protected:
@@ -127,8 +137,8 @@ namespace godot {
         static void _bind_methods();
 
     public:
-        ResonanceAmbisonicPlayer();
-        ~ResonanceAmbisonicPlayer();
+        ResonanceAmbisonicPlayer() = default;
+        ~ResonanceAmbisonicPlayer() = default;
 
         void _ready() override;
         void _process(double delta) override;

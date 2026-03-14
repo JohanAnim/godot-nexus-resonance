@@ -2,8 +2,6 @@
 #define RESONANCE_PROBE_BATCH_REGISTRY_H
 
 #include <phonon.h>
-#include <godot_cpp/variant/utility_functions.hpp>
-#include <functional>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
@@ -20,11 +18,9 @@ class ResonanceProbeBatchRegistry {
 public:
     ResonanceProbeBatchRegistry() = default;
 
-    /// Load probe batch. Returns handle or -1.
+    /// Load probe batch. Returns handle or -1. Caller must validate compatibility before calling.
     int32_t load_batch(IPLContext ctx, IPLSimulator sim, std::mutex* sim_mutex,
-        Ref<ResonanceProbeData> data, uint64_t data_hash,
-        int reflection_type, bool pathing_enabled, bool skip_pathing_check,
-        std::function<bool(int baked_type)> is_reflection_compatible);
+        Ref<ResonanceProbeData> data, uint64_t data_hash);
 
     void remove_batch(int32_t handle, IPLSimulator sim, std::mutex* sim_mutex);
 

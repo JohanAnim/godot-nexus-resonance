@@ -8,22 +8,28 @@
 
 namespace godot {
 
+    class ResonanceAudioEffect;
+
     /// Resonance Reverb Bus Effect.
-    /// NOTE: Reverb is applied per-source in ResonancePlayer (process_mix_direct). This bus effect
-    /// reads from IPLReflectionMixer which is not populated in the current architecture. The bus
-    /// is kept active for future mixer-based reverb or external sends. For now, reverb comes from
-    /// each ResonancePlayer's internal pipeline.
+    /// Reads from IPLReflectionMixer (fed by ResonancePlayer when reflection_type is Convolution). Parametric/Hybrid use per-source process_mix_direct instead.
     class ResonanceAudioEffectInstance : public AudioEffectInstance {
         GDCLASS(ResonanceAudioEffectInstance, AudioEffectInstance)
+
+    public:
+        ResonanceAudioEffectInstance(const ResonanceAudioEffectInstance&) = delete;
+        ResonanceAudioEffectInstance(ResonanceAudioEffectInstance&&) = delete;
+        // Assignment implicitly deleted when copy ctor is deleted; explicit decl conflicts with Godot base.
 
     private:
         ResonanceMixerProcessor processor;
         bool initialized_processor = false;
-        int heartbeat_counter = 0;
+        Ref<ResonanceAudioEffect> effect_ref;
 
     public:
-        ResonanceAudioEffectInstance();
+        ResonanceAudioEffectInstance() = default;
         ~ResonanceAudioEffectInstance();
+
+        void set_effect(const Ref<ResonanceAudioEffect>& p_effect) { effect_ref = p_effect; }
 
         virtual void _process(const void* src_buffer, AudioFrame* dst_buffer, int32_t frame_count) override;
         virtual bool _process_silence() const override { return true; }  // Always process - we output mixer, not bus input
@@ -37,11 +43,12 @@ namespace godot {
 
     private:
         // Future: Add Binaural Toggle, Gain, etc. here
-        float gain_db = 0.0f;
+        // Default -4 dB to compensate for Convolution IR bass buildup and match Parametric balance
+        float gain_db = -4.0f;
 
     public:
         ResonanceAudioEffect();
-        ~ResonanceAudioEffect();
+        ~ResonanceAudioEffect() = default;
 
         void set_gain_db(float p_db);
         float get_gain_db() const;

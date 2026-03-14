@@ -1,15 +1,29 @@
 #ifndef RESONANCE_PROCESSOR_DIRECT_H
 #define RESONANCE_PROCESSOR_DIRECT_H
 
+#include "resonance_constants.h"
 #include <phonon.h>
-#include <vector>
 
 namespace godot {
+
+    enum class DirectInitFlags : int {
+        NONE = 0,
+        DIRECT_EFFECT = 1 << 0,
+        BINAURAL_EFFECT = 1 << 1,
+        PANNING_EFFECT = 1 << 2,
+        BUFFERS = 1 << 3,
+        AMBISONICS_ENCODE = 1 << 4,
+    };
+    inline DirectInitFlags operator|(DirectInitFlags a, DirectInitFlags b) {
+        return static_cast<DirectInitFlags>(static_cast<int>(a) | static_cast<int>(b));
+    }
+    inline DirectInitFlags operator|=(DirectInitFlags& a, DirectInitFlags b) { a = a | b; return a; }
+    inline bool operator&(DirectInitFlags a, DirectInitFlags b) { return (static_cast<int>(a) & static_cast<int>(b)) != 0; }
 
     class ResonanceDirectProcessor {
     private:
         IPLContext context = nullptr;
-        IPLHRTF hrtf_handle = nullptr; // <--- NEW: Store reference to global HRTF
+        IPLHRTF hrtf_handle = nullptr;
 
         // Effects chain
         IPLDirectEffect direct_effect = nullptr;
@@ -19,7 +33,8 @@ namespace godot {
         IPLAmbisonicsBinauralEffect ambisonics_binaural_effect = nullptr;
 
         // Intermediate buffers
-        IPLAudioBuffer internal_mono_buffer{};
+        IPLAudioBuffer internal_mono_buffer{};       // Downmix input for direct effect
+        IPLAudioBuffer internal_direct_output{};    // Output of iplDirectEffectApply (separate from input per Steam Audio ref)
         IPLAudioBuffer internal_ambi_buffer{};
 
         // Stored for tail processing when source stops
@@ -28,14 +43,19 @@ namespace godot {
         float last_spatial_blend = 1.0f;
         bool last_use_ambisonics_encode_path = false;
 
-        bool is_initialized = false;
-        int frame_size = 1024;
+        DirectInitFlags init_flags = DirectInitFlags::NONE;
+        int frame_size = resonance::kGodotDefaultFrameSize;
         int ambisonic_order = 1;
         bool use_ambisonics_encode = false;
 
     public:
-        ResonanceDirectProcessor();
+        ResonanceDirectProcessor() = default;
         ~ResonanceDirectProcessor();
+
+        ResonanceDirectProcessor(const ResonanceDirectProcessor&) = delete;
+        ResonanceDirectProcessor& operator=(const ResonanceDirectProcessor&) = delete;
+        ResonanceDirectProcessor(ResonanceDirectProcessor&&) = delete;
+        ResonanceDirectProcessor& operator=(ResonanceDirectProcessor&&) = delete;
 
         void initialize(IPLContext p_context, int p_sample_rate, int p_frame_size, int p_ambisonic_order = 1, bool p_use_ambisonics_encode = false);
         void cleanup();
@@ -68,7 +88,7 @@ namespace godot {
         void reset_for_new_playback();
 
     private:
-        void apply_spatialization(const IPLVector3& dir, IPLAudioBuffer& out,
+        void apply_spatialization(const IPLVector3& dir, const IPLAudioBuffer& direct_out, IPLAudioBuffer& out,
             bool use_ambi_path, bool use_binaural, bool hrtf_bilinear, float spatial_blend);
     };
 } // namespace godot

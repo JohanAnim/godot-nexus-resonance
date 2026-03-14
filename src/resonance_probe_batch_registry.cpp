@@ -1,21 +1,24 @@
 #include "resonance_probe_batch_registry.h"
+#include "resonance_constants.h"
 #include "resonance_probe_data.h"
+#include "resonance_log.h"
 #include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
 
 namespace godot {
 
 bool ResonanceProbeBatchRegistry::is_reflection_type_compatible(int baked_type, int reflection_type) {
-    bool uses_conv = (reflection_type == 0 || reflection_type == 2 || reflection_type == 3);
-    bool uses_param = (reflection_type == 1 || reflection_type == 2);
-    return (baked_type == 2) ||
-        (baked_type == 0 && uses_conv) ||
-        (baked_type == 1 && uses_param);
+    bool uses_conv = (reflection_type == resonance::kReflectionConvolution ||
+        reflection_type == resonance::kReflectionHybrid || reflection_type == resonance::kReflectionTan);
+    bool uses_param = (reflection_type == resonance::kReflectionParametric ||
+        reflection_type == resonance::kReflectionHybrid);
+    return (baked_type == resonance::kBakedReflectionHybrid) ||
+        (baked_type == resonance::kBakedReflectionConvolution && uses_conv) ||
+        (baked_type == resonance::kBakedReflectionParametric && uses_param);
 }
 
 int32_t ResonanceProbeBatchRegistry::load_batch(IPLContext ctx, IPLSimulator sim, std::mutex* sim_mutex,
-    Ref<ResonanceProbeData> data, uint64_t data_hash,
-    int /*reflection_type*/, bool /*pathing_enabled*/, bool /*skip_pathing_check*/,
-    std::function<bool(int)> /*is_reflection_compatible*/) {
+    Ref<ResonanceProbeData> data, uint64_t data_hash) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = hash_to_handle_.find(data_hash);
@@ -23,7 +26,7 @@ int32_t ResonanceProbeBatchRegistry::load_batch(IPLContext ctx, IPLSimulator sim
             int32_t existing = it->second;
             refcount_[existing]++;
             if (Engine::get_singleton() && Engine::get_singleton()->is_editor_hint()) {
-                UtilityFunctions::print("Nexus Resonance: Reusing existing probe batch (duplicate data). Refcount: ", refcount_[existing]);
+                UtilityFunctions::print_rich("[color=cyan]Nexus Resonance:[/color] Reusing existing probe batch (duplicate data). Refcount: " + String::num(refcount_[existing]));
             }
             return existing;
         }
@@ -34,7 +37,10 @@ int32_t ResonanceProbeBatchRegistry::load_batch(IPLContext ctx, IPLSimulator sim
     sSettings.data = (IPLbyte*)pba.ptr();
     sSettings.size = pba.size();
     IPLSerializedObject sObj = nullptr;
-    iplSerializedObjectCreate(ctx, &sSettings, &sObj);
+    if (iplSerializedObjectCreate(ctx, &sSettings, &sObj) != IPL_STATUS_SUCCESS) {
+        ResonanceLog::error("ResonanceProbeBatchRegistry: iplSerializedObjectCreate failed.");
+        return -1;
+    }
 
     IPLProbeBatch batch = nullptr;
     IPLerror load_status = iplProbeBatchLoad(ctx, sObj, &batch);
@@ -47,22 +53,42 @@ int32_t ResonanceProbeBatchRegistry::load_batch(IPLContext ctx, IPLSimulator sim
 
     iplProbeBatchCommit(batch);
     {
-        std::lock_guard<std::mutex> lock(*sim_mutex);
-        iplSimulatorAddProbeBatch(sim, batch);
-        iplSimulatorCommit(sim);
-    }
-    int32_t handle;
-    {
         std::lock_guard<std::mutex> lock(mutex_);
-        handle = probe_batch_manager_.add_batch(batch);
+        auto it = hash_to_handle_.find(data_hash);
+        if (it != hash_to_handle_.end()) {
+            iplProbeBatchRelease(&batch);
+            int32_t existing = it->second;
+            refcount_[existing]++;
+            if (Engine::get_singleton() && Engine::get_singleton()->is_editor_hint()) {
+                UtilityFunctions::print_rich("[color=cyan]Nexus Resonance:[/color] Reusing existing probe batch (concurrent load). Refcount: " + String::num(refcount_[existing]));
+            }
+            return existing;
+        }
+        if (static_cast<int>(handle_to_hash_.size()) >= resonance::kMaxProbeBatches) {
+            iplProbeBatchRelease(&batch);
+            ResonanceLog::error("ResonanceProbeBatchRegistry: Max probe batches exceeded (" + String::num(resonance::kMaxProbeBatches) + "). Remove unused probe volumes or increase limit.");
+            return -1;
+        }
+        int32_t handle = probe_batch_manager_.add_batch(batch);
+        if (handle < 0) {
+            ResonanceLog::error("ResonanceProbeBatchRegistry: add_batch failed (handle overflow).");
+            return -1;
+        }
         hash_to_handle_[data_hash] = handle;
         handle_to_hash_[handle] = data_hash;
         refcount_[handle] = 1;
         handle_has_pathing_[handle] = (data->get_pathing_params_hash() > 0);
         handle_baked_refl_[handle] = data->get_baked_reflection_type();
+        {
+            std::lock_guard<std::mutex> sim_lock(*sim_mutex);
+            iplSimulatorAddProbeBatch(sim, batch);
+            iplSimulatorCommit(sim);
+        }
+        if (Engine::get_singleton() && Engine::get_singleton()->is_editor_hint()) {
+            UtilityFunctions::print_rich("[color=cyan]Nexus Resonance:[/color] Probe batch loaded successfully. Reverb simulation active.");
+        }
+        return handle;
     }
-    UtilityFunctions::print("Nexus Resonance: Probe batch loaded successfully. Reverb simulation active.");
-    return handle;
 }
 
 void ResonanceProbeBatchRegistry::remove_batch(int32_t handle, IPLSimulator sim, std::mutex* sim_mutex) {
@@ -104,9 +130,11 @@ void ResonanceProbeBatchRegistry::clear_batches(IPLSimulator sim, std::mutex* si
     }
     if (batches.empty() || !sim) return;
     std::lock_guard<std::mutex> lock(*sim_mutex);
-    for (IPLProbeBatch batch : batches) {
-        if (batch) iplSimulatorRemoveProbeBatch(sim, batch);
-        if (batch) iplProbeBatchRelease(&batch);
+    for (auto& batch : batches) {
+        if (batch) {
+            iplSimulatorRemoveProbeBatch(sim, batch);
+            iplProbeBatchRelease(&batch);
+        }
     }
     iplSimulatorCommit(sim);
 }
@@ -148,7 +176,7 @@ bool ResonanceProbeBatchRegistry::is_compatible(int32_t handle, int reflection_t
     auto path_it = handle_has_pathing_.find(handle);
     if (path_it != handle_has_pathing_.end()) has_pathing = path_it->second;
 
-    if (baked_type >= 0 && baked_type <= 2) {
+    if (baked_type >= resonance::kBakedReflectionConvolution && baked_type <= resonance::kBakedReflectionHybrid) {
         if (!is_reflection_type_compatible(baked_type, reflection_type)) return false;
     }
     if (pathing_enabled && !has_pathing) return false;

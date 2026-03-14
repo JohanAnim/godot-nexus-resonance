@@ -1,13 +1,11 @@
 #include "resonance_sofa_asset.h"
+#include "resonance_constants.h"
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <cmath>
 
 using namespace godot;
-
-ResonanceSOFAAsset::ResonanceSOFAAsset() {}
-ResonanceSOFAAsset::~ResonanceSOFAAsset() {}
 
 void ResonanceSOFAAsset::set_sofa_data(const PackedByteArray& p_data) {
     sofa_data = p_data;
@@ -18,7 +16,7 @@ PackedByteArray ResonanceSOFAAsset::get_sofa_data() const {
 }
 
 void ResonanceSOFAAsset::set_volume_db(float p_db) {
-    volume_db = p_db;
+    volume_db = CLAMP(p_db, resonance::kHRTFVolumeDBMin, resonance::kHRTFVolumeDBMax);
 }
 
 void ResonanceSOFAAsset::set_norm_type(int p_type) {
@@ -42,12 +40,12 @@ Error ResonanceSOFAAsset::load_from_file(const String& p_path) {
     Ref<FileAccess> f = FileAccess::open(path, FileAccess::READ);
     if (f.is_null()) return ERR_FILE_CANT_OPEN;
     sofa_data = f->get_buffer(f->get_length());
-    return sofa_data.size() > 0 ? OK : ERR_FILE_CORRUPT;
+    // Empty file = ERR_FILE_CORRUPT (invalid SOFA); non-empty = OK.
+    return !sofa_data.is_empty() ? OK : ERR_FILE_CORRUPT;
 }
 
 float ResonanceSOFAAsset::db_to_gain(float db) {
-    const float kMinDB = -90.0f;
-    if (db <= kMinDB) return 0.0f;
+    if (db <= resonance::kHRTFMinDB) return 0.0f;
     return static_cast<float>(std::pow(10.0, static_cast<double>(db) / 20.0));
 }
 
@@ -61,6 +59,6 @@ void ResonanceSOFAAsset::_bind_methods() {
     ClassDB::bind_method(D_METHOD("load_from_file", "p_path"), &ResonanceSOFAAsset::load_from_file);
 
     ADD_PROPERTY(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "sofa_data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_sofa_data", "get_sofa_data");
-    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "volume_db", PROPERTY_HINT_RANGE, "-24,24,0.5"), "set_volume_db", "get_volume_db");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "volume_db", PROPERTY_HINT_RANGE, "-60,24,0.5"), "set_volume_db", "get_volume_db");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "norm_type", PROPERTY_HINT_ENUM, "None,RMS"), "set_norm_type", "get_norm_type");
 }

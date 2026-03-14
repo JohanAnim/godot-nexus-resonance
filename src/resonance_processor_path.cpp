@@ -1,15 +1,15 @@
 #include "resonance_processor_path.h"
+#include <algorithm>
+#include <cstring>
 #include "resonance_server.h"
 #include "resonance_log.h"
 
 namespace godot {
 
-    ResonancePathProcessor::ResonancePathProcessor() {}
-
     ResonancePathProcessor::~ResonancePathProcessor() { cleanup(); }
 
     void ResonancePathProcessor::initialize(IPLContext p_context, int p_sample_rate, int p_frame_size, int p_ambisonic_order) {
-        if (is_initialized) return;
+        if (init_flags != PathInitFlags::NONE) return;
         if (!p_context) {
             ResonanceLog::error("PathProcessor: Context is null!");
             return;
@@ -37,40 +37,39 @@ namespace godot {
             ResonanceLog::error("PathProcessor: Failed to create IPLPathEffect");
             return;
         }
+        init_flags = init_flags | PathInitFlags::PATHEFFECT;
 
-        iplAudioBufferAllocate(context, 1, frame_size, &internal_mono_buffer);
-        iplAudioBufferAllocate(context, 2, frame_size, &internal_stereo_buffer);
-
-        if (!internal_mono_buffer.data || !internal_stereo_buffer.data) {
+        if (iplAudioBufferAllocate(context, 1, frame_size, &internal_mono_buffer) != IPL_STATUS_SUCCESS ||
+            !internal_mono_buffer.data) {
             ResonanceLog::error("PathProcessor: Buffer allocation failed.");
             cleanup();
             return;
         }
-
-        is_initialized = true;
+        init_flags = init_flags | PathInitFlags::BUFFERS;
         ResonanceLog::info("PathProcessor initialized successfully.");
     }
 
     void ResonancePathProcessor::cleanup() {
         if (path_effect) { iplPathEffectRelease(&path_effect); path_effect = nullptr; }
-        if (context) {
-            if (internal_mono_buffer.data) iplAudioBufferFree(context, &internal_mono_buffer);
-            if (internal_stereo_buffer.data) iplAudioBufferFree(context, &internal_stereo_buffer);
+        if (context && internal_mono_buffer.data) {
+            iplAudioBufferFree(context, &internal_mono_buffer);
         }
         memset(&internal_mono_buffer, 0, sizeof(internal_mono_buffer));
-        memset(&internal_stereo_buffer, 0, sizeof(internal_stereo_buffer));
         context = nullptr;
-        is_initialized = false;
+        init_flags = PathInitFlags::NONE;
     }
 
     void ResonancePathProcessor::process(const IPLAudioBuffer& in_buffer, const IPLPathEffectParams& params, IPLAudioBuffer& out_buffer) {
-        if (!is_initialized || !path_effect || !params.shCoeffs) return;
+        if (!(init_flags & PathInitFlags::PATHEFFECT) || !(init_flags & PathInitFlags::BUFFERS) || !path_effect || !params.shCoeffs) return;
+        if (!in_buffer.data || !out_buffer.data || out_buffer.numSamples < frame_size) return;
 
         // IPL API has non-const param; input is read-only
         iplAudioBufferDownmix(context, const_cast<IPLAudioBuffer*>(&in_buffer), &internal_mono_buffer);
 
         IPLPathEffectParams effective_params = params;
-        effective_params.hrtf = params.hrtf;
+        for (int i = 0; i < IPL_NUM_BANDS; i++) {
+            effective_params.eqCoeffs[i] = std::max(resonance::kPathEQCoeffMin, std::min(resonance::kPathEQCoeffMax, params.eqCoeffs[i]));
+        }
 
         iplPathEffectApply(path_effect, &effective_params, &internal_mono_buffer, &out_buffer);
     }

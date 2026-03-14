@@ -55,6 +55,8 @@ func _import(source_file: String, save_path: String, options: Dictionary, platfo
 	# Also save beside .sofa for easy reference (e.g. res://addons/nexus_resonance/sofa/QU_KEMAR_anechoic_1m.tres)
 	var beside_path := source_file.get_basename() + ".tres"
 	if beside_path != out_path:
-		ResourceSaver.save(asset, beside_path)
+		var beside_err := ResourceSaver.save(asset, beside_path)
+		if beside_err != OK:
+			return beside_err
 		gen_files.append(beside_path)
 	return OK

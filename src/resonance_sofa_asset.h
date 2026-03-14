@@ -27,8 +27,8 @@ namespace godot {
         static void _bind_methods();
 
     public:
-        ResonanceSOFAAsset();
-        ~ResonanceSOFAAsset();
+        ResonanceSOFAAsset() = default;
+        ~ResonanceSOFAAsset() = default;
 
         void set_sofa_data(const PackedByteArray& p_data);
         PackedByteArray get_sofa_data() const;
@@ -39,10 +39,11 @@ namespace godot {
         void set_norm_type(int p_type);
         int get_norm_type() const { return norm_type; }
 
+        /// Raw pointer to sofa_data. Returns nullptr when sofa_data is empty; caller must check is_valid()/get_size().
         const uint8_t* get_data_ptr() const;
         int64_t get_size() const;
 
-        bool is_valid() const { return sofa_data.size() > 0; }
+        bool is_valid() const { return !sofa_data.is_empty(); }
 
         /// Load .sofa file from path. Returns OK on success.
         Error load_from_file(const String& p_path);

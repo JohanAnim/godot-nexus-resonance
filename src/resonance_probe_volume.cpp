@@ -1,15 +1,15 @@
 #include "resonance_probe_volume.h"
 #include "resonance_server.h"
+#include "resonance_player.h"
 #include "resonance_log.h"
 #include "resonance_constants.h"
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/global_constants.hpp>
-#include <godot_cpp/classes/file_access.hpp>
-#include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/scene_tree.hpp>
+#include <godot_cpp/classes/window.hpp>
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
@@ -22,7 +22,6 @@
 #include <godot_cpp/variant/node_path.hpp>
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
 
 using namespace godot;
 
@@ -54,8 +53,8 @@ void ResonanceProbeVolume::_create_visuals_resources() {
     viz_multimesh->set_use_colors(true);
 
     viz_mesh.instantiate();
-    viz_mesh->set_radius(0.25f);
-    viz_mesh->set_height(0.5f);
+    viz_mesh->set_radius(resonance::kProbeVizMeshRadius);
+    viz_mesh->set_height(resonance::kProbeVizMeshHeight);
 
     Ref<StandardMaterial3D> mat;
     mat.instantiate();
@@ -77,35 +76,31 @@ void ResonanceProbeVolume::_notification(int p_what) {
     }
 }
 
-static void clear_player_refs_recursive(Node* node, ResonanceProbeVolume* self) {
-    if (!node) return;
-    if (node->get_class() == StringName("ResonancePlayer")) {
-        Variant pv = node->get("pathing_probe_volume");
-        if (pv.get_type() == Variant::NODE_PATH) {
-            NodePath path = pv;
-            if (!path.is_empty()) {
-                Node* target = node->get_node_or_null(path);
-                if (target == self) {
-                    node->set("pathing_probe_volume", NodePath());
-                }
-            }
-        }
-    }
-    for (int i = 0; i < node->get_child_count(); i++) {
-        clear_player_refs_recursive(node->get_child(i), self);
+static void clear_player_ref_to_volume(ResonanceProbeVolume* self, ResonancePlayer* player) {
+    if (!player) return;
+    NodePath pv = player->get_pathing_probe_volume();
+    if (pv.is_empty()) return;
+    Node* target = player->get_node_or_null(pv);
+    if (target == self) {
+        player->clear_pathing_probe_immediate();
     }
 }
 
 // Godot engine bug: Deleting a referenced ResonanceProbeVolume triggers
 // "ERROR: core/string/node_path.cpp:272 - Condition "!p_np.is_absolute()" is true. Returning: NodePath()"
 // when ResonancePlayer.pathing_probe_volume points to it. We clear those refs on EXIT_TREE to avoid this.
+// Also try tree root as fallback when edited scene root is null (e.g. during editor teardown).
+// IMPORTANT: We must call clear_pathing_probe_immediate() to sync update_source(pathing_batch=-1) before
+// _exit_tree removes the probe batch; otherwise the worker may use freed batch data (use-after-free).
 void ResonanceProbeVolume::_clear_player_refs_to_this() {
     SceneTree* st = get_tree();
     if (!st) return;
-    Node* root = st->get_edited_scene_root();
-    if (!root) return;
-
-    clear_player_refs_recursive(root, this);
+    Array players = st->get_nodes_in_group("resonance_player");
+    for (int i = 0; i < players.size(); i++) {
+        Node* n = Object::cast_to<Node>(players[i]);
+        ResonancePlayer* rp = Object::cast_to<ResonancePlayer>(n);
+        clear_player_ref_to_volume(this, rp);
+    }
 }
 
 void ResonanceProbeVolume::_ready() {
@@ -120,13 +115,13 @@ void ResonanceProbeVolume::_ready() {
             call_deferred("_check_probe_data_loaded");
         }
 
-        // 2. Setup Visualization
-        _ensure_viz_instance();
+        // 2. Setup Visualization (only create when show_probes is On)
+        if (viz_visible) {
+            _ensure_viz_instance();
+            call_deferred("_update_visuals");
+        }
 
         set_process(true);
-
-        // FIX: Update Visuals deferred to ensure Global Transform is ready
-        call_deferred("_update_visuals");
     }
     else {
         // RUNTIME
@@ -152,7 +147,7 @@ void ResonanceProbeVolume::_check_probe_data_loaded() {
 
 void ResonanceProbeVolume::_runtime_load_probe_batch() {
     if (!_has_valid_resonance_config()) {
-        if (_runtime_load_retry_count < MAX_RUNTIME_LOAD_RETRIES) {
+        if (_runtime_load_retry_count < resonance::kProbeVolumeMaxRuntimeLoadRetries) {
             _runtime_load_retry_count++;
             call_deferred("_runtime_load_probe_batch");
             return;
@@ -195,19 +190,22 @@ void ResonanceProbeVolume::_exit_tree() {
         if (srv && !ResonanceServer::is_shutting_down()) srv->remove_probe_batch(probe_batch_handle);
         probe_batch_handle = -1;
     }
-    if (viz_instance) {
-        viz_instance->queue_free();
-        viz_instance = nullptr;
-    }
+    // viz_instance is a child node; Godot frees children when parent is removed.
+    viz_instance = nullptr;
 }
 
 void ResonanceProbeVolume::_process(double delta) {
     if (!Engine::get_singleton()->is_editor_hint()) return;
 
+    // Sync viz_instance visibility with viz_visible (handles editor property load order / setter not firing)
+    if (viz_instance && viz_instance->is_visible() != viz_visible) {
+        viz_instance->set_visible(viz_visible);
+    }
+
     if (viz_visible && viz_multimesh.is_valid()) {
         if (viz_multimesh->get_instance_count() == 0) {
             viz_retry_timer += delta;
-            if (viz_retry_timer > 1.0) {
+            if (viz_retry_timer > resonance::kProbeVizRetryIntervalSec) {
                 viz_retry_timer = 0.0;
                 ResonanceServer* srv = ResonanceServer::get_singleton();
                 if (srv && srv->is_initialized()) {
@@ -228,7 +226,7 @@ void ResonanceProbeVolume::_process(double delta) {
 
 void ResonanceProbeVolume::_queue_update() {
     update_pending = true;
-    debounce_timer = DEBOUNCE_TIME;
+    debounce_timer = resonance::kProbeVizDebounceSec;
 }
 
 uint32_t ResonanceProbeVolume::_get_bake_params_hash() const {
@@ -328,6 +326,9 @@ void ResonanceProbeVolume::set_viz_visible(bool p_visible) {
     if (viz_instance) {
         viz_instance->set_visible(p_visible);
     }
+    if (!p_visible && viz_multimesh.is_valid()) {
+        viz_multimesh->set_instance_count(0);
+    }
     if (p_visible) _queue_update();
 }
 
@@ -342,24 +343,30 @@ void ResonanceProbeVolume::_update_visuals() {
     if (!srv || !srv->is_initialized()) return;
     if (!viz_multimesh.is_valid()) return;
 
-    if (Engine::get_singleton()->is_editor_hint()) _ensure_viz_instance();
+    if (Engine::get_singleton()->is_editor_hint()) {
+        _ensure_viz_instance();
+        // Update viz_color_state from probe dirty check when not overridden by runtime config mismatch (red).
+        if (viz_color_state != 2) {
+            viz_color_state = _compute_is_probe_dirty() ? 0 : 1;
+        }
+    }
 
     Transform3D volume_transform = get_global_transform();
     Transform3D to_local_xform = volume_transform.affine_inverse();
     Vector3 extents = region_size * 0.5f;
 
     PackedVector3Array points;
-    if (probe_data.is_valid() && probe_data->get_probe_positions().size() > 0) {
+    if (probe_data.is_valid() && !probe_data->get_probe_positions().is_empty()) {
         points = probe_data->get_probe_positions();
     }
-    if (points.size() == 0 && generation_type == GEN_UNIFORM_FLOOR) {
+    if (points.is_empty() && generation_type == GEN_UNIFORM_FLOOR) {
         points = srv->generate_probes_scene_aware(volume_transform, extents, spacing, generation_type, height_above_floor);
     }
-    if (points.size() == 0) {
+    if (points.is_empty()) {
         points = srv->generate_manual_grid(volume_transform, extents, spacing, generation_type, height_above_floor);
     }
 
-    if (points.size() == 0) {
+    if (points.is_empty()) {
         viz_multimesh->set_instance_count(0);
         return;
     }
@@ -368,11 +375,11 @@ void ResonanceProbeVolume::_update_visuals() {
 
     Color probe_color;
     if (viz_color_state == 2)
-        probe_color = Color(1.0, 0.2, 0.2, 1.0);      // Red: settings mismatch
+        probe_color = Color(resonance::kProbeVizColorRedR, resonance::kProbeVizColorRedG, resonance::kProbeVizColorRedB, resonance::kProbeVizColorRedA);
     else if (viz_color_state == 1)
-        probe_color = Color(0.2, 0.5, 1.0, 1.0);      // Blue: up-to-date
+        probe_color = Color(resonance::kProbeVizColorBlueR, resonance::kProbeVizColorBlueG, resonance::kProbeVizColorBlueB, resonance::kProbeVizColorBlueA);
     else
-        probe_color = Color(0.5, 0.5, 0.5, 0.8);      // Gray: outdated or missing
+        probe_color = Color(resonance::kProbeVizColorGrayR, resonance::kProbeVizColorGrayG, resonance::kProbeVizColorGrayB, resonance::kProbeVizColorGrayA);
 
     float scale = viz_probe_scale <= 0.0f ? 1.0f : viz_probe_scale;
     for (int i = 0; i < points.size(); i++) {
@@ -411,7 +418,7 @@ PackedVector3Array ResonanceProbeVolume::generate_probes_on_floor_raycast() cons
     float offset_x = (size.x < spacing) ? extents.x : spacing * 0.5f;
     float offset_z = (size.z < spacing) ? extents.z : spacing * 0.5f;
 
-    const float ray_down = 100.0f;
+    const float ray_down = resonance::kProbeFloorRaycastDepth;
     int hit_count = 0;
     for (int ix = 0; ix < count_x; ix++) {
         for (int iz = 0; iz < count_z; iz++) {
@@ -431,7 +438,7 @@ PackedVector3Array ResonanceProbeVolume::generate_probes_on_floor_raycast() cons
         }
     }
     if (Engine::get_singleton()->is_editor_hint() && hit_count > 0) {
-        UtilityFunctions::print("Nexus Resonance: Uniform Floor raycast placed ", hit_count, "/", (int)points.size(), " probes on collision geometry.");
+        UtilityFunctions::print_rich("[color=cyan]Nexus Resonance:[/color] Uniform Floor raycast placed " + String::num(hit_count) + "/" + String::num((int)points.size()) + " probes on collision geometry.");
     }
     return points;
 }
@@ -443,7 +450,7 @@ void ResonanceProbeVolume::_prepare_and_execute_bake(const PackedVector3Array* p
     }
     ResonanceServer* srv = ResonanceServer::get_singleton();
     if (!srv || !srv->is_initialized()) {
-        UtilityFunctions::push_error("Resonance Server not initialized!");
+        UtilityFunctions::push_error("ResonanceProbeVolume: Resonance Server not initialized!");
         return;
     }
 
@@ -465,10 +472,17 @@ void ResonanceProbeVolume::_prepare_and_execute_bake(const PackedVector3Array* p
                 }
             }
         }
-        String path = "res://audio_data/" + scene_name + "_" + node_name + "_baked_probes.tres";
-        Ref<DirAccess> da = DirAccess::open("res://");
-        if (da.is_valid() && !da->dir_exists("audio_data")) {
-            da->make_dir("audio_data");
+        String base_dir = resonance::kProbeBakeOutputDir;
+        ProjectSettings* ps = ProjectSettings::get_singleton();
+        if (ps && ps->has_setting("audio/nexus_resonance/bake/output_dir")) {
+            base_dir = String(ps->get_setting("audio/nexus_resonance/bake/output_dir"));
+            if (!base_dir.ends_with("/")) base_dir += "/";
+        }
+        String path = base_dir + scene_name + "_" + node_name + "_baked_probes.tres";
+        String dir = path.get_base_dir();
+        if (!dir.is_empty() && ps) {
+            String abs_dir = ps->globalize_path(dir);
+            DirAccess::make_dir_recursive_absolute(abs_dir);
         }
         probe_data->take_over_path(path);
         probe_data->emit_changed();
@@ -479,10 +493,10 @@ void ResonanceProbeVolume::_prepare_and_execute_bake(const PackedVector3Array* p
     probe_data->set_bake_params_hash(static_cast<int64_t>(_get_bake_params_hash()));
 
     bool success = false;
-    if (p_precomputed_points && p_precomputed_points->size() > 0) {
+    if (p_precomputed_points && !p_precomputed_points->is_empty()) {
         success = srv->bake_manual_grid(*p_precomputed_points, probe_data);
         if (success && Engine::get_singleton()->is_editor_hint()) {
-            UtilityFunctions::print("Nexus Resonance: Uniform Floor used geometry raycast. Probes placed on floor. (Requires CollisionShape3D on floor geometry.)");
+            UtilityFunctions::print_rich("[color=cyan]Nexus Resonance:[/color] Uniform Floor used geometry raycast. Probes placed on floor. (Requires CollisionShape3D on floor geometry.)");
         }
     }
     if (!success) {
@@ -503,7 +517,7 @@ void ResonanceProbeVolume::_prepare_and_execute_bake(const PackedVector3Array* p
 }
 
 void ResonanceProbeVolume::bake_probes_with_floor_points(const PackedVector3Array& p_points) {
-    _prepare_and_execute_bake(p_points.size() > 0 ? &p_points : nullptr);
+    _prepare_and_execute_bake(!p_points.is_empty() ? &p_points : nullptr);
 }
 
 void ResonanceProbeVolume::bake_probes() {
@@ -511,7 +525,7 @@ void ResonanceProbeVolume::bake_probes() {
     if (generation_type == GEN_UNIFORM_FLOOR) {
         raycast_points = generate_probes_on_floor_raycast();
     }
-    _prepare_and_execute_bake(raycast_points.size() > 0 ? &raycast_points : nullptr);
+    _prepare_and_execute_bake(!raycast_points.is_empty() ? &raycast_points : nullptr);
 }
 
 void ResonanceProbeVolume::set_probe_data(const Ref<ResonanceProbeData>& p_data) {
@@ -533,7 +547,7 @@ Array ResonanceProbeVolume::get_bake_listeners() const {
     return bake_listeners;
 }
 void ResonanceProbeVolume::set_bake_influence_radius(float p_radius) {
-    bake_influence_radius = std::max(1.0f, p_radius);
+    bake_influence_radius = std::max(resonance::kProbeBakeInfluenceRadiusMin, p_radius);
 }
 float ResonanceProbeVolume::get_bake_influence_radius() const {
     return bake_influence_radius;
@@ -548,7 +562,7 @@ Ref<Resource> ResonanceProbeVolume::get_bake_config() const { return bake_config
 void ResonanceProbeVolume::set_region_size(Vector3 p_size) { region_size = p_size; _queue_update(); }
 Vector3 ResonanceProbeVolume::get_region_size() const { return region_size; }
 
-void ResonanceProbeVolume::set_spacing(float p_spacing) { spacing = CLAMP(p_spacing, 0.1f, 100.0f); _queue_update(); }
+void ResonanceProbeVolume::set_spacing(float p_spacing) { spacing = CLAMP(p_spacing, resonance::kProbeSpacingMin, resonance::kProbeSpacingMax); _queue_update(); }
 float ResonanceProbeVolume::get_spacing() const { return spacing; }
 
 void ResonanceProbeVolume::set_generation_type(ProbeGenerationType p_type) {
@@ -562,13 +576,13 @@ void ResonanceProbeVolume::set_height_above_floor(float p_height) { height_above
 float ResonanceProbeVolume::get_height_above_floor() const { return height_above_floor; }
 
 void ResonanceProbeVolume::set_viz_probe_scale(float p_scale) {
-    viz_probe_scale = CLAMP(p_scale, 0.1f, 3.0f);
+    viz_probe_scale = CLAMP(p_scale, resonance::kProbeVizScaleMin, resonance::kProbeVizScaleMax);
     _queue_update();
 }
 float ResonanceProbeVolume::get_viz_probe_scale() const { return viz_probe_scale; }
 
 void ResonanceProbeVolume::set_viz_color_state(int p_state) {
-    viz_color_state = CLAMP(p_state, 0, 2);
+    viz_color_state = CLAMP(p_state, resonance::kProbeVizColorStateMin, resonance::kProbeVizColorStateMax);
     _queue_update();
 }
 int ResonanceProbeVolume::get_viz_color_state() const { return viz_color_state; }
@@ -595,8 +609,8 @@ void ResonanceProbeVolume::notify_runtime_config_changed(int p_runtime_refl, boo
     bool has_sl = probe_data.is_valid() && probe_data->get_static_listener_params_hash() > 0;
 
     bool config_compatible = (baked_refl == p_runtime_refl) ||
-        (baked_refl == 2 && p_runtime_refl >= 0 && p_runtime_refl <= 2) ||
-        (p_runtime_refl == 2 && baked_refl >= 0 && baked_refl <= 1) ||
+        (baked_refl == resonance::kBakedReflectionHybrid && p_runtime_refl >= resonance::kReflectionConvolution && p_runtime_refl <= resonance::kReflectionHybrid) ||
+        (p_runtime_refl == resonance::kReflectionHybrid && baked_refl >= resonance::kBakedReflectionConvolution && baked_refl <= resonance::kBakedReflectionParametric) ||
         (baked_refl == -1);
     bool reflection_ok = !has_data || (pd_hash == vol_hash && config_compatible);
     bool pathing_ok = !p_runtime_pathing || !wants_path || has_pathing;

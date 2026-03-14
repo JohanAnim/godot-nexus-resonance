@@ -52,3 +52,29 @@ TEST_CASE("apply_volume_ramp 1 to 0 ramp down", "[volume_ramp]") {
 	REQUIRE(buffer[2] == Approx(0.5f));
 	REQUIRE(buffer[3] == Approx(0.25f));
 }
+
+TEST_CASE("sanitize_audio_float finite unchanged", "[resonance_math]") {
+	REQUIRE(sanitize_audio_float(1.0f) == 1.0f);
+	REQUIRE(sanitize_audio_float(-0.5f) == -0.5f);
+	REQUIRE(sanitize_audio_float(0.0f) == 0.0f);
+}
+
+TEST_CASE("sanitize_audio_float nan becomes zero", "[resonance_math]") {
+	float nan_val = std::numeric_limits<float>::quiet_NaN();
+	REQUIRE(sanitize_audio_float(nan_val) == 0.0f);
+}
+
+TEST_CASE("sanitize_audio_float inf becomes zero", "[resonance_math]") {
+	REQUIRE(sanitize_audio_float(std::numeric_limits<float>::infinity()) == 0.0f);
+	REQUIRE(sanitize_audio_float(-std::numeric_limits<float>::infinity()) == 0.0f);
+}
+
+TEST_CASE("clamp_reverb_time valid above 0.1", "[resonance_math]") {
+	REQUIRE(clamp_reverb_time(0.5f) == Approx(0.5f));
+	REQUIRE(clamp_reverb_time(2.0f) == Approx(2.0f));
+}
+
+TEST_CASE("clamp_reverb_time below 0.1 clamped", "[resonance_math]") {
+	REQUIRE(clamp_reverb_time(0.05f) == Approx(0.1f));
+	REQUIRE(clamp_reverb_time(0.0f) == Approx(0.1f));
+}

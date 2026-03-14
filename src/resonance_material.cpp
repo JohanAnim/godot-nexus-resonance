@@ -3,13 +3,6 @@
 
 using namespace godot;
 
-ResonanceMaterial::ResonanceMaterial() {
-    // Default values (Generic concrete-like material)
-}
-
-ResonanceMaterial::~ResonanceMaterial() {
-}
-
 // --- Getters / Setters ---
 
 void ResonanceMaterial::set_low_freq_absorption(float p_val) {
@@ -60,6 +53,8 @@ float ResonanceMaterial::get_transmission() const {
 // --- Internal Logic ---
 
 IPLMaterial ResonanceMaterial::get_ipl_material() const {
+    // ResonanceMaterial maps to Steam Audio 3-band model. IPL_NUM_BANDS must be 3 (not IPL_ENABLE_OCTAVE_BANDS).
+    static_assert(IPL_NUM_BANDS == 3, "ResonanceMaterial expects IPL_NUM_BANDS == 3");
     IPLMaterial mat{};
     mat.absorption[0] = low_freq_absorption;
     mat.absorption[1] = mid_freq_absorption;

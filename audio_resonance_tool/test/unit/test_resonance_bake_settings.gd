@@ -34,3 +34,32 @@ func test_create_default_returns_valid_config():
 	var bc = ResonanceBakeConfig.create_default()
 	assert_not_null(bc, "create_default should return non-null")
 	assert_true(bc is ResonanceBakeConfig, "create_default should return ResonanceBakeConfig")
+
+# --- pathing_params_hash: must match C++ ResonanceBaker::bake_pathing and GDScript _compute_pathing_hash ---
+
+static func _pathing_hash_from_params(params: Dictionary) -> int:
+	return hash(var_to_str({
+		"vis_range": params.get("bake_pathing_vis_range", 500),
+		"path_range": params.get("bake_pathing_path_range", 100),
+		"num_samples": params.get("bake_pathing_num_samples", 16),
+		"radius": params.get("bake_pathing_radius", 0.5),
+		"threshold": params.get("bake_pathing_threshold", 0.1)
+	}))
+
+func test_pathing_hash_deterministic():
+	var bc = ResonanceBakeConfig.create_default()
+	var params = bc.get_bake_params()
+	var h1 = _pathing_hash_from_params(params)
+	var h2 = _pathing_hash_from_params(params)
+	assert_eq(h1, h2, "pathing hash should be deterministic")
+	assert_ne(h1, 0, "pathing hash for default params should be non-zero")
+
+func test_pathing_hash_changes_with_params():
+	var bc = ResonanceBakeConfig.create_default()
+	bc.pathing_enabled = true
+	var params = bc.get_bake_params()
+	var h_default = _pathing_hash_from_params(params)
+	bc.bake_pathing_vis_range = 600.0
+	var params_modified = bc.get_bake_params()
+	var h_modified = _pathing_hash_from_params(params_modified)
+	assert_ne(h_default, h_modified, "different pathing params should produce different hash")

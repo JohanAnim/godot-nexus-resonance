@@ -2,17 +2,33 @@
 #include "resonance_log.h"
 #include "resonance_server.h"
 #include "resonance_math.h"
+#include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
-#include <cstdio>
-#include <cmath>
 
 namespace godot {
 
-    ResonanceMixerProcessor::ResonanceMixerProcessor() {}
+    // Warn once when output buffer is smaller than our frame size (drops samples)
+    static bool s_frame_count_small_warned = false;
+
+    static void _sanitize_audio_buffer(IPLAudioBuffer* buf) {
+        if (!buf || !buf->data) return;
+        for (int ch = 0; ch < buf->numChannels; ch++) {
+            if (!buf->data[ch]) continue;
+            for (int i = 0; i < buf->numSamples; i++) {
+                buf->data[ch][i] = resonance::sanitize_audio_float(buf->data[ch][i]);
+            }
+        }
+    }
+
     ResonanceMixerProcessor::~ResonanceMixerProcessor() { cleanup(); }
 
+    bool ResonanceMixerProcessor::_can_decode() const {
+        return (init_flags & MixerInitFlags::BUFFERS) &&
+            ((init_flags & MixerInitFlags::DECODEEFFECT) || ((init_flags & MixerInitFlags::DECODEEFFECT_7_1) && (init_flags & MixerInitFlags::VIRTUALSURROUND)));
+    }
+
     void ResonanceMixerProcessor::initialize(IPLContext p_context, int p_sample_rate, int p_frame_size, int p_ambisonic_order) {
-        if (is_initialized) return;
+        if (init_flags != MixerInitFlags::NONE) return;
 
         context = p_context;
         frame_size = p_frame_size;
@@ -23,8 +39,10 @@ namespace godot {
         if (iplAudioBufferAllocate(context, num_channels, frame_size, &sa_ambisonic_buffer) != IPL_STATUS_SUCCESS ||
             iplAudioBufferAllocate(context, 2, frame_size, &sa_stereo_buffer) != IPL_STATUS_SUCCESS) {
             ResonanceLog::error("ResonanceMixerProcessor: Buffer allocation failed.");
+            cleanup();
             return;
         }
+        init_flags = init_flags | MixerInitFlags::BUFFERS;
 
         ResonanceServer* srv = ResonanceServer::get_singleton();
         bool use_vs = srv && srv->use_virtual_surround_output();
@@ -39,8 +57,10 @@ namespace godot {
 
         if (iplAmbisonicsDecodeEffectCreate(context, &audioSettings, &decSettings, &decode_effect) != IPL_STATUS_SUCCESS) {
             ResonanceLog::error("ResonanceMixerProcessor: iplAmbisonicsDecodeEffectCreate failed.");
+            cleanup();
             return;
         }
+        init_flags = init_flags | MixerInitFlags::DECODEEFFECT;
 
         // 2. Virtual Surround path: decode to 7.1, then VirtualSurround -> stereo
         if (use_vs && hrtf_handle) {
@@ -50,8 +70,10 @@ namespace godot {
             dec7Settings.maxOrder = ambisonic_order;
             dec7Settings.hrtf = nullptr;
 
-            if (iplAmbisonicsDecodeEffectCreate(context, &audioSettings, &dec7Settings, &decode_effect_7_1) != IPL_STATUS_SUCCESS ||
-                iplAudioBufferAllocate(context, 8, frame_size, &sa_7_1_buffer) != IPL_STATUS_SUCCESS) {
+            if (iplAmbisonicsDecodeEffectCreate(context, &audioSettings, &dec7Settings, &decode_effect_7_1) == IPL_STATUS_SUCCESS &&
+                iplAudioBufferAllocate(context, 8, frame_size, &sa_7_1_buffer) == IPL_STATUS_SUCCESS) {
+                init_flags = init_flags | MixerInitFlags::DECODEEFFECT_7_1;
+            } else {
                 ResonanceLog::error("ResonanceMixerProcessor: 7.1 decode/buffer allocation failed.");
             }
 
@@ -60,14 +82,15 @@ namespace godot {
             vsSettings.speakerLayout.numSpeakers = 8;
             vsSettings.hrtf = hrtf_handle;
 
-            if (iplVirtualSurroundEffectCreate(context, &audioSettings, &vsSettings, &virtual_surround_effect) != IPL_STATUS_SUCCESS) {
+            if (iplVirtualSurroundEffectCreate(context, &audioSettings, &vsSettings, &virtual_surround_effect) == IPL_STATUS_SUCCESS) {
+                init_flags = init_flags | MixerInitFlags::VIRTUALSURROUND;
+            } else {
                 ResonanceLog::error("ResonanceMixerProcessor: iplVirtualSurroundEffectCreate failed.");
-                if (decode_effect_7_1) { iplAmbisonicsDecodeEffectRelease(&decode_effect_7_1); decode_effect_7_1 = nullptr; }
-                iplAudioBufferFree(context, &sa_7_1_buffer);
+                if (decode_effect_7_1) { iplAmbisonicsDecodeEffectRelease(&decode_effect_7_1); decode_effect_7_1 = nullptr; init_flags = static_cast<MixerInitFlags>(static_cast<int>(init_flags) & ~static_cast<int>(MixerInitFlags::DECODEEFFECT_7_1)); }
+                if (sa_7_1_buffer.data) iplAudioBufferFree(context, &sa_7_1_buffer);
+                sa_7_1_buffer.data = nullptr;
             }
         }
-
-        is_initialized = true;
     }
 
     void ResonanceMixerProcessor::cleanup() {
@@ -78,12 +101,11 @@ namespace godot {
         decode_effect_7_1 = nullptr;
         virtual_surround_effect = nullptr;
         if (context) {
-            iplAudioBufferFree(context, &sa_ambisonic_buffer);
-            iplAudioBufferFree(context, &sa_stereo_buffer);
-            if (sa_7_1_buffer.data) iplAudioBufferFree(context, &sa_7_1_buffer);
+            if (sa_ambisonic_buffer.data) { iplAudioBufferFree(context, &sa_ambisonic_buffer); sa_ambisonic_buffer.data = nullptr; }
+            if (sa_stereo_buffer.data) { iplAudioBufferFree(context, &sa_stereo_buffer); sa_stereo_buffer.data = nullptr; }
+            if (sa_7_1_buffer.data) { iplAudioBufferFree(context, &sa_7_1_buffer); sa_7_1_buffer.data = nullptr; }
         }
-        sa_7_1_buffer.data = nullptr;
-        is_initialized = false;
+        init_flags = MixerInitFlags::NONE;
         context = nullptr;
     }
 
@@ -118,7 +140,7 @@ namespace godot {
     }
 
     bool ResonanceMixerProcessor::process_mixer_return(IPLReflectionMixer mixer_handle, const IPLCoordinateSpace3& listener_coords, AudioFrame* out_frames, int frame_count) {
-        if (!is_initialized || !mixer_handle || !decode_effect) return false;
+        if (!_can_decode() || !mixer_handle) return false;
 
         // 1. Apply Mixer: Extracts the accumulated audio from the mixer into our local Ambisonic buffer.
         // The mixer apply step consumes accumulated audio; params are required by API but not used for convolution.
@@ -126,22 +148,29 @@ namespace godot {
         IPLReflectionEffectParams params{};
         params.type = IPL_REFLECTIONEFFECTTYPE_PARAMETRIC;
         params.numChannels = sa_ambisonic_buffer.numChannels;
-        params.reverbTimes[0] = params.reverbTimes[1] = params.reverbTimes[2] = 0.5f;  // Dummy; not used for mixer consumption
+        params.reverbTimes[0] = params.reverbTimes[1] = params.reverbTimes[2] = resonance::kMixerParametricDummyReverbTime;
 
         iplReflectionMixerApply(mixer_handle, &params, &sa_ambisonic_buffer);
+        _sanitize_audio_buffer(&sa_ambisonic_buffer);
 
         _decode_ambisonic_to_stereo_buffer(&sa_ambisonic_buffer, listener_coords);
+        _sanitize_audio_buffer(&sa_stereo_buffer);
 
         int safe_frames = (frame_count < frame_size) ? frame_count : frame_size;
+        if (frame_count < frame_size && !s_frame_count_small_warned) {
+            s_frame_count_small_warned = true;
+            UtilityFunctions::push_warning("Nexus Resonance: Reverb output frame_count (" + String::num_int64(frame_count) + ") < audio_frame_size (" + String::num_int64(frame_size) + "). Some samples dropped. Match Godot mix buffer to audio_frame_size.");
+        }
         _write_stereo_to_audio_frames(sa_stereo_buffer.data[0], sa_stereo_buffer.data[1], out_frames, safe_frames);
         return true;
     }
 
     bool ResonanceMixerProcessor::decode_ambisonic_to_stereo(IPLAudioBuffer* ambi_buf,
         const IPLCoordinateSpace3& listener_coords, AudioFrame* out_frames, int frame_count) {
-        if (!is_initialized || !decode_effect || !ambi_buf || !ambi_buf->data) return false;
+        if (!_can_decode() || !ambi_buf || !ambi_buf->data) return false;
 
         _decode_ambisonic_to_stereo_buffer(ambi_buf, listener_coords);
+        _sanitize_audio_buffer(&sa_stereo_buffer);
 
         int safe_frames = (frame_count < frame_size) ? frame_count : frame_size;
         _write_stereo_to_audio_frames(sa_stereo_buffer.data[0], sa_stereo_buffer.data[1], out_frames, safe_frames);

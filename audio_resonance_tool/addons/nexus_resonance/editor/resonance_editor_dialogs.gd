@@ -56,7 +56,7 @@ static func show_warning(editor_interface: EditorInterface, message: String) -> 
 
 ## Info -> console only.
 static func show_info(message: String) -> void:
-	print(UIStrings.PREFIX + message)
+	print_rich("[color=cyan]Nexus Resonance:[/color] " + message)
 
 ## Structured error dialog with optional cause, solution, doc link.
 static func show_error_dialog(
@@ -169,6 +169,34 @@ static func show_validation_dialog(
 		dialog.queue_free()
 		if on_confirmed.is_valid():
 			on_confirmed.call(all_ok)
+	dialog.confirmed.connect(cleanup)
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.close_requested.connect(dialog.queue_free)
+	base.add_child(dialog)
+	dialog.popup_centered()
+	dialog.get_ok_button().call_deferred("grab_focus")
+
+## Generic confirmation dialog with title, message, and optional on_confirmed callback.
+static func show_confirm_dialog(
+	editor_interface: EditorInterface,
+	title: String,
+	message: String,
+	on_confirmed: Callable = Callable()
+) -> void:
+	if not editor_interface:
+		return
+	var base = editor_interface.get_base_control()
+	if not base:
+		return
+	var dialog = ConfirmationDialog.new()
+	dialog.title = title
+	dialog.dialog_text = message
+	dialog.theme = editor_interface.get_editor_theme()
+	dialog.min_size = Vector2i(420, 0)
+	var cleanup = func():
+		dialog.queue_free()
+		if on_confirmed.is_valid():
+			on_confirmed.call()
 	dialog.confirmed.connect(cleanup)
 	dialog.canceled.connect(dialog.queue_free)
 	dialog.close_requested.connect(dialog.queue_free)

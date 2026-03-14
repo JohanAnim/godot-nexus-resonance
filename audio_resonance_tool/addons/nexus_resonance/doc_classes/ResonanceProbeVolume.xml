@@ -36,6 +36,33 @@
 				Reloads probe data from the probe_data resource into the server. Call after pathing or static listener/source bake to apply updated data without restarting.
 			</description>
 		</method>
+		<method name="get_bake_params_hash">
+			<return type="int" />
+			<description>
+				Returns a hash of the volume's bake parameters (region_size, spacing, generation_type, etc.). Used to detect if probe_data is outdated and needs rebaking.
+			</description>
+		</method>
+		<method name="get_viz_color_state">
+			<return type="int" />
+			<description>
+				Returns the probe visualization color state: 0 = gray (outdated/missing), 1 = blue (up-to-date), 2 = red (settings mismatch).
+			</description>
+		</method>
+		<method name="set_viz_color_state">
+			<return type="void" />
+			<param index="0" name="p_state" type="int" />
+			<description>
+				Sets the probe visualization color state. Called internally when bake status or config changes.
+			</description>
+		</method>
+		<method name="notify_runtime_config_changed">
+			<return type="void" />
+			<param index="0" name="p_runtime_refl" type="int" />
+			<param index="1" name="p_runtime_pathing" type="bool" />
+			<description>
+				Called when ResonanceRuntimeConfig changes (e.g. reflections mode, pathing). Reloads probe batch and updates viz state. Invoked by ResonanceRuntime.
+			</description>
+		</method>
 	</methods>
 	<members>
 		<member name="bake_config" type="ResonanceBakeConfig" setter="set_bake_config" getter="get_bake_config">

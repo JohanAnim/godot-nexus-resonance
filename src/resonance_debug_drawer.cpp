@@ -1,4 +1,5 @@
 #include "resonance_debug_drawer.h"
+#include "resonance_constants.h"
 #include <godot_cpp/variant/utility_functions.hpp>
 
 using namespace godot;
@@ -19,15 +20,20 @@ void ResonanceDebugDrawer::initialize(Node3D* p_parent) {
 }
 
 void ResonanceDebugDrawer::cleanup() {
-    if (mesh_instance) {
-        mesh_instance->queue_free();
-        mesh_instance = nullptr;
+    // Remove and free our nodes so re-initialize with same parent does not create duplicates.
+    if (parent_node) {
+        if (mesh_instance) {
+            parent_node->remove_child(mesh_instance);
+            memdelete(mesh_instance);
+            mesh_instance = nullptr;
+            immediate_mesh = nullptr;  // owned by mesh_instance, now invalid
+        }
+        if (label_instance) {
+            parent_node->remove_child(label_instance);
+            memdelete(label_instance);
+            label_instance = nullptr;
+        }
     }
-    if (label_instance) {
-        label_instance->queue_free();
-        label_instance = nullptr;
-    }
-    // immediate_mesh is freed by mesh_instance or ref counting
     parent_node = nullptr;
 }
 
@@ -46,9 +52,9 @@ void ResonanceDebugDrawer::_create_visuals_if_needed() {
     if (!label_instance) {
         label_instance = memnew(Label3D);
         label_instance->set_billboard_mode(BaseMaterial3D::BILLBOARD_ENABLED);
-        label_instance->set_position(Vector3(0, 0.5, 0)); // Offset above player
-        label_instance->set_pixel_size(0.005f);
-        label_instance->set_modulate(Color(1, 1, 0)); // Yellow
+        label_instance->set_position(Vector3(0, resonance::kDebugDrawerLabelOffsetY, 0));
+        label_instance->set_pixel_size(resonance::kDebugDrawerLabelPixelSize);
+        label_instance->set_modulate(Color(1, 1, 0));
         label_instance->set("no_depth_test", true);   // See through walls
         label_instance->set_visible(false);
         parent_node->add_child(label_instance);
@@ -89,13 +95,17 @@ void ResonanceDebugDrawer::_update_label_text(const ResonanceDebugData& data, St
         : "";
 
     String text = "";
+    if (!node_name.is_empty()) {
+        text += node_name + "\n";
+    }
     text += "Occ: " + String::num(data.occlusion, 2) + "\n";
     text += "Trans L/M/H: " + String::num(data.transmission[0], 2) + " / " + String::num(data.transmission[1], 2) + " / " + String::num(data.transmission[2], 2) + "\n";
     text += "Atten: " + String::num(data.attenuation, 2) + "\n";
     text += air_str + "\n";
     if (data.directivity_enabled) text += dir_str + "\n";
 
-    text += "Reverb: " + String(data.has_reverb ? "Active" : "None");
+    text += "Signal D/R/P: " + String::num(data.signal_direct, 2) + " / " +
+            String::num(data.signal_reverb, 2) + " / " + String::num(data.signal_pathing, 2);
 
     label_instance->set_text(text);
 }
@@ -110,13 +120,17 @@ void ResonanceDebugDrawer::process(double delta, const ResonanceDebugData& data,
 
     _create_visuals_if_needed();
 
-    // 2. Lines from source to listener: not drawn for "debug sources".
-    //    debug_sources shows only source-local info (label), not listener-facing rays.
-    if (mesh_instance) mesh_instance->set_visible(false);
+    // 2. Lines from source to listener (when show_occ): draw occlusion ray Source->Listener
+    if (show_occ && mesh_instance) {
+        _draw_line(data.source_pos, data.listener_pos, data.occlusion);
+        mesh_instance->set_visible(true);
+    } else if (mesh_instance) {
+        mesh_instance->set_visible(false);
+    }
 
     // 3. Update Label (Throttled for readability/performance)
     update_timer += delta;
-    if (update_timer >= LABEL_UPDATE_RATE) {
+    if (update_timer >= resonance::kDebugDrawerLabelUpdateRate) {
         update_timer = 0.0;
         if (show_occ || show_reverb) {
             _update_label_text(data, node_name);

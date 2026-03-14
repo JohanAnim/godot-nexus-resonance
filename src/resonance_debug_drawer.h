@@ -9,6 +9,7 @@
 #include <godot_cpp/variant/vector3.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/string.hpp>
+#include "resonance_constants.h"
 
 namespace godot {
 
@@ -26,7 +27,11 @@ namespace godot {
 
         bool air_abs_enabled;
         bool directivity_enabled;
-        bool has_reverb;
+
+        // Signal levels (0-10) after all calculations. Direct, Reverb, Pathing.
+        float signal_direct = 0.0f;
+        float signal_reverb = 0.0f;
+        float signal_pathing = 0.0f;
     };
 
     class ResonanceDebugDrawer {
@@ -40,7 +45,6 @@ namespace godot {
         Ref<StandardMaterial3D> material;
 
         double update_timer = 0.0;
-        const double LABEL_UPDATE_RATE = 0.2; // 5x per second
 
         void _create_visuals_if_needed();
         void _draw_line(const Vector3& from, const Vector3& to, float occlusion);
@@ -49,6 +53,11 @@ namespace godot {
     public:
         ResonanceDebugDrawer();
         ~ResonanceDebugDrawer();
+
+        ResonanceDebugDrawer(const ResonanceDebugDrawer&) = delete;
+        ResonanceDebugDrawer& operator=(const ResonanceDebugDrawer&) = delete;
+        ResonanceDebugDrawer(ResonanceDebugDrawer&&) = delete;
+        ResonanceDebugDrawer& operator=(ResonanceDebugDrawer&&) = delete;
 
         // Lifecycle
         void initialize(Node3D* p_parent);

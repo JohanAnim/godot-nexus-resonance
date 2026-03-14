@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://dtxjnfkgr2eqh"]
+
+[ext_resource type="PackedScene" uid="uid://bmq3jx7dd6mny" path="res://props/assets/SM_Pole_01/SM_Pole_01.gltf" id="1_2s0qo"]
+[ext_resource type="ResonanceMaterial" uid="uid://duhckwdy7m7rl" path="res://addons/nexus_resonance/materials/wood.tres" id="2_smvlm"]
+[ext_resource type="ArrayMesh" uid="uid://cit4i4tge7y8k" path="res://props/assets/SM_Pole_01/SM_Pole_01_Cube_reso_2.res" id="3_2s0qo"]
+
+[node name="SM_Pole_01" unique_id=1785728638 instance=ExtResource("1_2s0qo")]
+
+[node name="SM_Pole_01_Cube_reso_2" type="ResonanceStaticGeometry" parent="." index="2" unique_id=849120656]
+material = ExtResource("2_smvlm")
+geometry_override = ExtResource("3_2s0qo")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)

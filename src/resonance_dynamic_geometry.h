@@ -16,7 +16,7 @@ protected:
 
 public:
     ResonanceDynamicGeometry();
-    ~ResonanceDynamicGeometry();
+    ~ResonanceDynamicGeometry() = default;
 };
 
 } // namespace godot

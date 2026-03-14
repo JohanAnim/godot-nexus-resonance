@@ -13,9 +13,11 @@ func test_get_config_applies_properties():
 	var rt = ResonanceRuntimeConfig.create_default()
 	rt.ambisonic_order = 2
 	rt.pathing_enabled = true
+	rt.scene_type = 2
 	var config = rt.get_config()
 	assert_eq(config.get("ambisonic_order", -1), 2, "ambisonic_order not applied")
 	assert_true(config.get("pathing_enabled", false), "pathing_enabled not applied")
+	assert_eq(config.get("scene_type", -1), 2, "scene_type not applied")
 
 func test_get_config_sample_rate_valid():
 	var rt = ResonanceRuntimeConfig.create_default()
@@ -35,6 +37,20 @@ func test_sample_rate_override_when_nonzero_uses_override():
 	rt.sample_rate_override = 44100
 	var config = rt.get_config()
 	assert_eq(config.get("sample_rate", -1), 44100, "sample_rate_override should be applied when > 0")
+
+func test_audio_frame_size_auto_returns_valid_value():
+	var rt = ResonanceRuntimeConfig.create_default()
+	rt.audio_frame_size = 0  # Auto
+	var config = rt.get_config()
+	var fs = config.get("audio_frame_size", -1)
+	var valid = [256, 512, 1024, 2048]
+	assert_true(fs in valid, "audio_frame_size Auto should return one of %s, got %s" % [valid, fs])
+
+func test_audio_frame_size_manual_passthrough():
+	var rt = ResonanceRuntimeConfig.create_default()
+	rt.audio_frame_size = 1024
+	var config = rt.get_config()
+	assert_eq(config.get("audio_frame_size", -1), 1024, "manual audio_frame_size should pass through")
 
 # --- get_effective_realtime_rays (Android fallback) ---
 

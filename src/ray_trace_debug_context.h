@@ -4,6 +4,7 @@
 #include <phonon.h>
 #include <godot_cpp/variant/vector3.hpp>
 #include <godot_cpp/variant/array.hpp>
+#include "resonance_constants.h"
 #include <vector>
 #include <mutex>
 #include <atomic>
@@ -20,11 +21,19 @@ namespace godot {
 
     class RayTraceDebugContext {
     public:
-        static constexpr int kMaxSegments = 8192;
+        static constexpr float kNormalLengthEpsilon = 1e-8f;
+        static constexpr float kRayTriangleEpsilon = 1e-7f;
+        static constexpr float kDefaultMaxRayDistance = 1e10f;
+        static constexpr float kMinRayT = 0.001f;
         static void set_debug_log_path(const char* path);
 
         RayTraceDebugContext();
         ~RayTraceDebugContext();
+
+        RayTraceDebugContext(const RayTraceDebugContext&) = delete;
+        RayTraceDebugContext& operator=(const RayTraceDebugContext&) = delete;
+        RayTraceDebugContext(RayTraceDebugContext&&) = delete;
+        RayTraceDebugContext& operator=(RayTraceDebugContext&&) = delete;
 
         void clear();
 
@@ -60,8 +69,12 @@ namespace godot {
         std::unordered_map<int, int> mesh_id_to_mat_offset_;
         int next_mesh_id_ = 1;
 
-        // Phase 3: Double-buffer for low-contention handoff. Worker writes to one buffer;
-        // consumer swaps under brief lock (swap only, no copy).
+        // Double-buffer for low-contention handoff between worker and main thread:
+        // - Worker (push_rays_for_viz): reads write_buffer_index_ (relaxed), writes to segment_buffers_[idx].
+        //   No mutex; worker and consumer never touch the same buffer simultaneously.
+        // - Consumer (get_segments_for_viz): takes swap_mutex_, reads from the other buffer (1-write_idx),
+        //   copies to out, clears it, then stores new write_idx (release) so worker switches buffers.
+        // Lock order (MUST be consistent to avoid deadlock): geometry_mutex_ first, then swap_mutex_.
         std::vector<RayDebugSegment> segment_buffers_[2];
         std::atomic<int> write_buffer_index_{0};
         std::mutex swap_mutex_;

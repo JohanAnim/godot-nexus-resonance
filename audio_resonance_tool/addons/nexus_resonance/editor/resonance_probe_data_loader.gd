@@ -33,7 +33,7 @@ func _get_resource_type(path: String) -> String:
 		return "ResonanceProbeData"
 	return ""
 
-func _load(path: String, _original_path: String, use_sub_threads: bool, cache_mode: int) -> Variant:
+func _load(path: String, _original_path: String, _use_sub_threads: bool, _cache_mode: int) -> Variant:
 	if _is_tres_resonance_probe_data(path):
 		return _load_tres(path)
 	return ERR_FILE_UNRECOGNIZED
@@ -100,18 +100,18 @@ func _parse_tres_data(content: String) -> Variant:
 		elif stripped.begins_with("static_listener_params_hash = "):
 			static_listener_params_hash = int(stripped.substr(31))
 	var data_result = PackedByteArray()
-	if not data_expr.is_empty():
+	if not data_expr.is_empty() and data_expr.length() < 256 * 1024 * 1024:
 		var r = str_to_var(data_expr)
 		if r is PackedByteArray:
 			data_result = r
-		else:
+		elif r != null:
 			push_warning("ResonanceProbeDataLoader: Invalid data field (expected PackedByteArray), got %s" % typeof(r))
 	var probe_positions_result = PackedVector3Array()
-	if not probe_positions_expr.is_empty():
+	if not probe_positions_expr.is_empty() and probe_positions_expr.length() < 1024 * 1024:
 		var r = str_to_var(probe_positions_expr)
 		if r is PackedVector3Array:
 			probe_positions_result = r
-		else:
+		elif r != null:
 			push_warning("ResonanceProbeDataLoader: Invalid probe_positions field (expected PackedVector3Array), got %s" % typeof(r))
 	return {
 		"data": data_result,

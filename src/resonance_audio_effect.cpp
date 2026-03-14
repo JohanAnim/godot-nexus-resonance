@@ -1,29 +1,26 @@
 #include "resonance_audio_effect.h"
 #include "resonance_server.h"
 #include "resonance_log.h"
-#include <cstdio>
 #include <algorithm>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 using namespace godot;
 
-// --- INSTANCE ---
+// Warn once per process when frame_count != server frame_size to avoid log spam.
+static bool s_frame_size_mismatch_warned = false;
 
-ResonanceAudioEffectInstance::ResonanceAudioEffectInstance() {
-    // Constructor; logging disabled by default
-    // UtilityFunctions::print("AudioEffectInstance Created.");
-}
+// --- INSTANCE ---
+// Note: When ResonanceServer reinitializes (e.g. via request_reinit_with_frame_size or reinit_audio_engine),
+// the processor holds stale IPLContext/effect handles. Effect instances are not recreated. For runtime reinit
+// scenarios, restart the game/editor or avoid reinit while audio is playing. Pre-release: full reinit detection
+// (e.g. server init-generation counter) may be added later.
 
 ResonanceAudioEffectInstance::~ResonanceAudioEffectInstance() {
     processor.cleanup();
 }
 
 void ResonanceAudioEffectInstance::_process(const void* src_buffer, AudioFrame* dst_buffer, int32_t frame_count) {
-    if (++heartbeat_counter > 100) {
-        heartbeat_counter = 0;
-    }
-
     ResonanceServer* srv = ResonanceServer::get_singleton();
 
     // Check shut down flag to avoid crashes on exit
@@ -31,16 +28,29 @@ void ResonanceAudioEffectInstance::_process(const void* src_buffer, AudioFrame* 
         return;
     }
 
-	// --- INITIALIZATION ---
+    int server_frame_size = srv->get_audio_frame_size();
+
+    // --- INITIALIZATION ---
     if (!initialized_processor) {
-        ResonanceLog::info("AudioEffect: Initializing MixerProcessor with frame size: " + String::num(frame_count));
+        ResonanceLog::info("AudioEffect: Initializing MixerProcessor with frame size: " + String::num(server_frame_size));
         processor.initialize(
             srv->get_context_handle(),
             srv->get_sample_rate(),
-            frame_count, // Use actual buffer size from Godot!
+            server_frame_size,  // Must match ReflectionMixer / Steam Audio block size
             srv->get_ambisonic_order()
         );
         initialized_processor = true;
+    }
+
+    // Validate frame_count matches server (mismatch causes crackling / buffer overrun)
+    if (frame_count != server_frame_size) {
+        if (srv->get_audio_frame_size_was_auto()) {
+            srv->request_reinit_with_frame_size(frame_count);
+        }
+        if (!s_frame_size_mismatch_warned) {
+            s_frame_size_mismatch_warned = true;
+            UtilityFunctions::push_warning("Nexus Resonance: Reverb bus frame_count (" + String::num_int64(frame_count) + ") != audio_frame_size (" + String::num_int64(server_frame_size) + "). Set ResonanceRuntimeConfig.audio_frame_size to Auto (0) to derive from Project Settings, or match manually.");
+        }
     }
 
     IPLReflectionMixer mixer = srv->get_reflection_mixer_handle();
@@ -75,14 +85,18 @@ void ResonanceAudioEffectInstance::_process(const void* src_buffer, AudioFrame* 
         iplReflectionMixerReset(mixer);
         frames_written = frame_count;
 
-        // --- SAFETY: Output limiter to prevent ear damage from overflow/NaN
+        float gain = 1.0f;
+        if (effect_ref.is_valid()) {
+            gain = static_cast<float>(UtilityFunctions::db_to_linear(effect_ref->get_gain_db()));
+        }
+
+        // --- SAFETY: Apply gain, then output limiter to prevent ear damage from overflow/NaN
         for (int i = 0; i < frame_count; i++) {
-            dst_buffer[i].left = std::clamp(dst_buffer[i].left, -1.0f, 1.0f);
-            dst_buffer[i].right = std::clamp(dst_buffer[i].right, -1.0f, 1.0f);
+            dst_buffer[i].left = std::clamp(dst_buffer[i].left * gain, -1.0f, 1.0f);
+            dst_buffer[i].right = std::clamp(dst_buffer[i].right * gain, -1.0f, 1.0f);
             float v = std::max(std::abs(dst_buffer[i].left), std::abs(dst_buffer[i].right));
             if (v > peak) peak = v;
         }
-
     }
 
     srv->update_reverb_effect_instrumentation(false, success, frames_written, peak);
@@ -91,11 +105,11 @@ void ResonanceAudioEffectInstance::_process(const void* src_buffer, AudioFrame* 
 // --- EFFECT RESOURCE ---
 
 ResonanceAudioEffect::ResonanceAudioEffect() { set_name("Resonance Reverb"); } // for Godot Audio Bus editor
-ResonanceAudioEffect::~ResonanceAudioEffect() {}
 
 Ref<AudioEffectInstance> ResonanceAudioEffect::_instantiate() {
     Ref<ResonanceAudioEffectInstance> ins;
     ins.instantiate();
+    ins->set_effect(Ref<ResonanceAudioEffect>(this));
     return ins;
 }
 

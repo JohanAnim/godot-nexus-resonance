@@ -39,6 +39,7 @@ RayTraceDebugContext::~RayTraceDebugContext() {
 }
 
 void RayTraceDebugContext::clear() {
+    // Lock order: geometry_mutex_ first, then swap_mutex_ (see ray_trace_debug_context.h)
     std::lock_guard<std::mutex> lock(geometry_mutex_);
     std::lock_guard<std::mutex> lock2(swap_mutex_);
     triangles_.clear();
@@ -55,6 +56,7 @@ int RayTraceDebugContext::register_mesh(const std::vector<IPLVector3>& vertices,
     const IPLint32* material_indices,
     const IPLMatrix4x4* transform,
     const IPLMaterial* material) {
+    (void)material_indices;  // Per-triangle materials ignored; debug context uses one material per mesh.
     std::lock_guard<std::mutex> lock(geometry_mutex_);
 
     IPLMatrix4x4 xform = transform ? *transform : identity_matrix();
@@ -85,7 +87,7 @@ int RayTraceDebugContext::register_mesh(const std::vector<IPLVector3>& vertices,
         float ny = e1.z * e2.x - e1.x * e2.z;
         float nz = e1.x * e2.y - e1.y * e2.x;
         float len = std::sqrt(nx * nx + ny * ny + nz * nz);
-        if (len > 1e-8f) {
+        if (len > kNormalLengthEpsilon) {
             td.normal.x = nx / len;
             td.normal.y = ny / len;
             td.normal.z = nz / len;
@@ -112,7 +114,7 @@ void RayTraceDebugContext::unregister_mesh(int mesh_id) {
 bool RayTraceDebugContext::ray_triangle_intersect(const IPLRay& ray, float t_min, float t_max,
     const TriangleData& tri, float& out_t, IPLVector3& out_normal) {
 
-    const float eps = 1e-7f;
+    const float eps = kRayTriangleEpsilon;
     IPLVector3 edge1 = { tri.v1.x - tri.v0.x, tri.v1.y - tri.v0.y, tri.v1.z - tri.v0.z };
     IPLVector3 edge2 = { tri.v2.x - tri.v0.x, tri.v2.y - tri.v0.y, tri.v2.z - tri.v0.z };
     IPLVector3 h = {
@@ -151,7 +153,7 @@ void RayTraceDebugContext::trace_batch(IPLint32 num_rays, const IPLRay* rays,
     for (IPLint32 i = 0; i < num_rays; i++) {
         const IPLRay& ray = rays[i];
         float t_min = min_distances ? min_distances[i] : 0.0f;
-        float t_max = max_distances ? max_distances[i] : 1e10f;
+        float t_max = max_distances ? max_distances[i] : kDefaultMaxRayDistance;
 
         if (t_max <= t_min) {
             hits[i].distance = INFINITY;
@@ -202,7 +204,7 @@ void RayTraceDebugContext::push_rays_for_viz(IPLint32 num_rays, const IPLRay* ra
     int idx = write_buffer_index_.load(std::memory_order_relaxed);
     std::vector<RayDebugSegment>& buf = segment_buffers_[idx];
     for (IPLint32 i = 0; i < num_rays; i++) {
-        if (buf.size() >= (size_t)kMaxSegments) break;
+        if (buf.size() >= (size_t)resonance::kRayDebugMaxSegments) break;
 
         const IPLRay& ray = rays[i];
         const IPLHit& hit = hits[i];
@@ -218,7 +220,7 @@ void RayTraceDebugContext::push_rays_for_viz(IPLint32 num_rays, const IPLRay* ra
             seg.to_y = ray.origin.y + ray.direction.y * hit.distance;
             seg.to_z = ray.origin.z + ray.direction.z * hit.distance;
         } else {
-            float far = 1000.0f;
+            float far = resonance::kRayDebugDefaultMissRayLength;
             seg.to_x = ray.origin.x + ray.direction.x * far;
             seg.to_y = ray.origin.y + ray.direction.y * far;
             seg.to_z = ray.origin.z + ray.direction.z * far;
@@ -235,12 +237,12 @@ void RayTraceDebugContext::get_segments_for_godot(Array& out_segments) {
     int read_idx = 1 - write_idx;
     std::vector<RayDebugSegment>& read_buf = segment_buffers_[read_idx];
 
+    auto is_finite_vec3 = [](float a, float b, float c) {
+        return std::isfinite(a) && std::isfinite(b) && std::isfinite(c);
+    };
     out_segments.clear();
     for (const RayDebugSegment& seg : read_buf) {
-        auto ok = [](float a, float b, float c) {
-            return std::isfinite(a) && std::isfinite(b) && std::isfinite(c);
-        };
-        if (!ok(seg.from_x, seg.from_y, seg.from_z) || !ok(seg.to_x, seg.to_y, seg.to_z))
+        if (!is_finite_vec3(seg.from_x, seg.from_y, seg.from_z) || !is_finite_vec3(seg.to_x, seg.to_y, seg.to_z))
             continue;
         Dictionary d;
         d[StringName("from")] = Vector3(seg.from_x, seg.from_y, seg.from_z);
@@ -260,17 +262,17 @@ void RayTraceDebugContext::trace_reflection_rays_for_viz(const IPLVector3& origi
     std::lock_guard<std::mutex> lock(geometry_mutex_);
     if (triangles_.empty()) return;
 
-    const float pi = 3.14159265f;
-    const float golden_ratio = 1.6180339887f;
-    for (int i = 0; i < num_rays && (int)out_segments.size() < kMaxSegments; i++) {
-        float phi = 2.0f * pi * (float)i / golden_ratio;
+    static constexpr float kPi = 3.14159265f;
+    static constexpr float kGoldenRatio = 1.6180339887f;
+    for (int i = 0; i < num_rays && (int)out_segments.size() < resonance::kRayDebugMaxSegments; i++) {
+        float phi = 2.0f * kPi * (float)i / kGoldenRatio;
         float theta = std::acos(1.0f - 2.0f * (i + 0.5f) / (float)num_rays);
         IPLVector3 dir;
         dir.x = std::sin(phi) * std::cos(theta);
         dir.y = std::sin(phi) * std::sin(theta);
         dir.z = std::cos(phi);
         IPLRay ray = { origin, dir };
-        float t_min = 0.001f;
+        float t_min = kMinRayT;
         float t_max = max_distance;
 
         float best_t = t_max + 1.0f;

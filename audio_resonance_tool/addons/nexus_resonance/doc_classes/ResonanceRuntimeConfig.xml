@@ -31,6 +31,18 @@
 				Returns effective realtime_rays for the given OS. Android has no Embree, so always 0.
 			</description>
 		</method>
+		<method name="get_bus_effective">
+			<return type="StringName" />
+			<description>
+				Returns effective bus for Direct + Pathing (player output). Empty config = Master.
+			</description>
+		</method>
+		<method name="get_reverb_bus_name_effective">
+			<return type="StringName" />
+			<description>
+				Returns effective reverb bus name. Empty config = ResonanceReverb.
+			</description>
+		</method>
 		<method name="get_config">
 			<return type="Dictionary" />
 			<description>
@@ -45,8 +57,11 @@
 		</method>
 	</methods>
 	<members>
-		<member name="audio_frame_size" type="int" default="512">
-			Steam Audio block size (256/512/1024). 256 = lower latency, more CPU. Match Godot's mix callback for best performance.
+		<member name="sample_rate_override" type="int" default="0">
+			Sample rate override. 0 = Use Godot Mix Rate (follow project settings). Other values = override; mismatch may cause audio issues (no resampling).
+		</member>
+		<member name="audio_frame_size" type="int" default="0">
+			Steam Audio block size. Auto (0) = derive from Project Settings audio/driver/output_latency. Manual (256/512/1024/2048) = override for performance tuning.
 		</member>
 		<member name="ambisonic_order" type="int" default="1">
 			Ambisonic order for reverb encoding: 1st Order, 2nd Order, or 3rd Order. Higher = more spatial detail, more CPU.
@@ -60,8 +75,14 @@
 		<member name="realtime_bounces" type="int" default="4">
 			Realtime reflection bounces (1–64).
 		</member>
-		<member name="use_radeon_rays" type="bool" default="false">
-			Use Radeon Rays instead of Embree for GPU-accelerated raytracing.
+		<member name="scene_type" type="int" default="1">
+			Ray tracer backend: Default (0) = built-in Phonon; Embree (1) = Intel, faster CPU; Radeon Rays (2) = GPU. Embree provides better CPU performance than Default.
+		</member>
+		<member name="opencl_device_type" type="int" default="0">
+			OpenCL device type when scene_type is Radeon Rays: GPU (0), CPU (1), or Any (2). Helps when GPU has OpenCL issues.
+		</member>
+		<member name="opencl_device_index" type="int" default="0">
+			OpenCL device index (0 = first matching device). Use when multiple GPUs present.
 		</member>
 		<member name="realtime_irradiance_min_distance" type="float" default="0.1">
 			Min distance for irradiance sampling (0.05–10.0 m). Only when Realtime Rays > 0.
@@ -72,8 +93,11 @@
 		<member name="realtime_num_diffuse_samples" type="int" default="32">
 			Diffuse samples per reflection point (8–64).
 		</member>
+		<member name="default_reflections_mode" type="int" default="0">
+			When sources use Use Global reflections_type: Baked (0) = probe interpolation; Realtime (1) = raytracing (requires realtime_rays &gt; 0).
+		</member>
 		<member name="reflection_type" type="int" default="0">
-			Reverb algorithm: Convolution (0), Parametric (1), Hybrid (2).
+			Reverb algorithm: Convolution (0), Parametric (1), Hybrid (2), TrueAudio Next (3, AMD GPU only).
 		</member>
 		<member name="hybrid_reverb_transition_time" type="float" default="1.0">
 			Hybrid reverb: length (seconds) of IR used for convolution before parametric tail. Only when reflection_type is Hybrid.
@@ -99,11 +123,20 @@
 		<member name="reverb_max_distance" type="float" default="0.0">
 			Max reverb distance (0 = unlimited).
 		</member>
+		<member name="bus" type="StringName" default="Master">
+			Target bus for Direct + Pathing (player output). Empty = Master. Fallback when players use Global bus override.
+		</member>
+		<member name="reverb_bus_name" type="StringName" default="ResonanceReverb">
+			Bus for convolution reverb (effect and activator). Empty = use Project Settings default. Reverb output is sent to [member bus].
+		</member>
 		<member name="reverb_transmission_amount" type="float" default="1.0">
 			How much transmission damps reverb (0–1). 0 = no damping, 1 = full damping (reverb scaled by material transmission).
 		</member>
 		<member name="pathing_enabled" type="bool" default="false">
-			Enable pathing (multi-path propagation).
+			Enable pathing (multi-path sound propagation). Requires baked pathing in Probe Volumes.
+		</member>
+		<member name="pathing_normalize_eq" type="bool" default="true">
+			Pathing: normalize EQ on path effect output. Prevents pathing from sounding too bright.
 		</member>
 		<member name="transmission_type" type="int" default="0">
 			Transmission: FreqIndependent (0), FreqDependent (1).
@@ -122,6 +155,9 @@
 		</member>
 		<member name="simulation_cpu_cores_percent" type="float" default="0.05">
 			Fraction of CPU cores for realtime raytracing (0–1). 0.05 = 5% of cores. Higher = smoother, more CPU.
+		</member>
+		<member name="context_simd_level" type="int" default="-1">
+			SIMD level cap: -1 = default (AVX512), 0 = AVX512, 1 = AVX2, 2 = AVX, 3 = SSE4, 4 = SSE2. Lower = more CPU compatible.
 		</member>
 		<member name="perspective_correction_enabled" type="bool" default="false">
 			Enable perspective correction for reverb.

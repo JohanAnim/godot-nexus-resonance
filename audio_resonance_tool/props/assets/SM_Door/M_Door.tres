@@ -1,0 +1,19 @@
+[gd_resource type="ORMMaterial3D" format=3 uid="uid://ba2gid5mgjs38"]
+
+[ext_resource type="Texture2D" uid="uid://doklq1v0f6lam" path="res://props/assets/SM_Door/T_Door_BaseColor.PNG" id="1_local"]
+[ext_resource type="Texture2D" uid="uid://bntsuw2wfthkb" path="res://props/assets/SM_Door/T_Door_ORM.png" id="2_local"]
+[ext_resource type="Texture2D" uid="uid://bl22hf3jfxacu" path="res://props/assets/SM_Door/T_Door_Normal.PNG" id="3_local"]
+
+[resource]
+resource_name = "wood"
+transparency = 3
+alpha_hash_scale = 1.0
+alpha_antialiasing_mode = 0
+cull_mode = 2
+albedo_texture = ExtResource("1_local")
+orm_texture = ExtResource("2_local")
+normal_enabled = true
+normal_texture = ExtResource("3_local")
+ao_enabled = true
+metadata/nexus_created = true
+metadata/nexus_material_id = "mat_bc2ee97c-f087-411e-9a5e-3f4dd09fb400"

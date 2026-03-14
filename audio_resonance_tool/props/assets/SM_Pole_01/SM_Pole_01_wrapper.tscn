@@ -1,0 +1,25 @@
+[gd_scene format=3 uid="uid://cnqeh6eawxegc"]
+
+[ext_resource type="PackedScene" uid="uid://bmq3jx7dd6mny" path="res://props/assets/SM_Pole_01/SM_Pole_01.gltf" id="1_rip2r"]
+[ext_resource type="ResonanceMaterial" uid="uid://duhckwdy7m7rl" path="res://addons/nexus_resonance/materials/wood.tres" id="2_i5s2i"]
+[ext_resource type="ArrayMesh" uid="uid://e4v35u3aqaur" path="res://props/assets/SM_Pole_01/SM_Pole_01_Cube_reso.res" id="3_vcex0"]
+
+[node name="SM_Pole_01" type="Node3D" unique_id=877993566]
+
+[node name="SM_Pole_01" type="StaticBody3D" parent="." unique_id=504742672 instance=ExtResource("1_rip2r")]
+collision_mask = 131
+metadata/_nexus_export_type = "ASSET"
+metadata/_nexus_gltf_path = "res://props/assets/SM_Pole_01/SM_Pole_01.gltf"
+metadata/nexus_resonance_nodes = [{
+"discard_mesh": true,
+"material_path": "res://addons/nexus_resonance/materials/wood.tres",
+"mesh_path": "res://props/assets/SM_Pole_01/SM_Pole_01_Cube_reso.res",
+"node_name": "Cube_reso",
+"transform_str": "Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)",
+"type": "RESONANCE_STATIC"
+}]
+
+[node name="SM_Pole_01_Cube_reso" type="ResonanceStaticGeometry" parent="SM_Pole_01" unique_id=1951781124]
+material = ExtResource("2_i5s2i")
+geometry_override = ExtResource("3_vcex0")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)

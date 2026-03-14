@@ -9,7 +9,7 @@
 #include <godot_cpp/classes/multi_mesh.hpp>
 #include <godot_cpp/classes/sphere_mesh.hpp>
 #include <godot_cpp/classes/material.hpp>
-#include "resonance_utils.h"
+#include "resonance_constants.h"
 #include "resonance_probe_data.h"
 #include <godot_cpp/templates/hashfuncs.hpp>
 #include <cstdint>
@@ -41,7 +41,8 @@ namespace godot {
         Ref<Resource> bake_config;
         int32_t probe_batch_handle = -1;
 
-        // Bake targets: NodePaths to ResonancePlayer (sources) and ResonanceListener (listeners) to bake for this volume.
+        // Bake targets: NodePaths to ResonancePlayer (sources) and ResonanceListener (listeners).
+        // Reserved for future per-volume bake targets; currently not passed to bake_manual_grid / bake_probes_for_volume.
         Array bake_sources;
         Array bake_listeners;
         float bake_influence_radius = 10000.0f;
@@ -49,9 +50,7 @@ namespace godot {
         bool update_pending = false;
         double debounce_timer = 0.0;
         double viz_retry_timer = 0.0;
-        const double DEBOUNCE_TIME = 0.2;
 
-        static const int MAX_RUNTIME_LOAD_RETRIES = 5;
         int _runtime_load_retry_count = 0;
 
         MultiMeshInstance3D* viz_instance = nullptr;
@@ -76,6 +75,9 @@ namespace godot {
     public:
         ResonanceProbeVolume();
         ~ResonanceProbeVolume();
+
+        ResonanceProbeVolume(const ResonanceProbeVolume&) = delete;
+        ResonanceProbeVolume(ResonanceProbeVolume&&) = delete;
 
         void _ready() override;
         void _process(double delta) override;

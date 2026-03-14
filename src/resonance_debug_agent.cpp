@@ -8,6 +8,7 @@ namespace godot {
 
 /// Forward log to ResonanceLogger (GDScript) when available. Category for thematic filtering.
 void resonance_logger_log(const char* category, const char* message, Dictionary data) {
+    if (!category || !message) return;
     Engine* eng = Engine::get_singleton();
     if (!eng || !eng->has_singleton("ResonanceLogger")) return;
     Variant logger_var = eng->get_singleton("ResonanceLogger");

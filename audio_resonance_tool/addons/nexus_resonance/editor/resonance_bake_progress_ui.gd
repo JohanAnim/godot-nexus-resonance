@@ -12,6 +12,7 @@ var cancel_requested: bool = false
 var _progress_dialog: AcceptDialog = null
 var _progress_bar: ProgressBar = null
 var _stage_label: Label = null
+var _status_label: Label = null
 var _details_panel: TextEdit = null
 var _bake_start_time: float = 0.0
 
@@ -22,7 +23,7 @@ func show_ui() -> void:
 	if not editor_interface:
 		return
 	cancel_requested = false
-	var base = editor_interface.get_base_control()
+	var base: Control = editor_interface.get_base_control()
 	if not base:
 		return
 	_progress_dialog = AcceptDialog.new()
@@ -40,7 +41,7 @@ func show_ui() -> void:
 	var status_section = VBoxContainer.new()
 	status_section.add_theme_constant_override("separation", 4)
 	var status_hdr = Label.new()
-	status_hdr.text = "Status"
+	status_hdr.text = UIStrings.PROGRESS_STATUS
 	status_hdr.add_theme_font_size_override("font_size", 11)
 	status_section.add_child(status_hdr)
 	_stage_label = Label.new()
@@ -48,12 +49,12 @@ func show_ui() -> void:
 	_stage_label.text = ""
 	_stage_label.add_theme_font_size_override("font_size", 10)
 	status_section.add_child(_stage_label)
-	var label = Label.new()
-	label.name = "StatusLabel"
-	label.text = UIStrings.PROGRESS_PREPARING
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 16)
-	status_section.add_child(label)
+	_status_label = Label.new()
+	_status_label.name = "StatusLabel"
+	_status_label.text = UIStrings.PROGRESS_PREPARING
+	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_label.add_theme_font_size_override("font_size", 16)
+	status_section.add_child(_status_label)
 	vbox.add_child(status_section)
 
 	vbox.add_child(HSeparator.new())
@@ -81,44 +82,41 @@ func show_ui() -> void:
 
 	var cancel_btn = Button.new()
 	cancel_btn.text = UIStrings.BTN_CANCEL
-	cancel_btn.tooltip_text = "Stop the current bake and close."
+	cancel_btn.tooltip_text = UIStrings.TT_CANCEL_BAKE
 	cancel_btn.pressed.connect(_on_cancel_pressed)
 	vbox.add_child(cancel_btn)
 	_progress_dialog.close_requested.connect(_on_cancel_pressed)
 	base.add_child(_progress_dialog)
 	_progress_dialog.popup_centered(Vector2i(440, 320))
-	cancel_btn.call_deferred("grab_focus")
+	Callable(cancel_btn, "grab_focus").call_deferred()
 
-	var srv = Engine.get_singleton("ResonanceServer") if Engine.has_singleton("ResonanceServer") else null
+	var srv: Variant = Engine.get_singleton("ResonanceServer") if Engine.has_singleton("ResonanceServer") else null
 	if srv and srv.has_signal("bake_progress") and _progress_bar:
 		srv.bake_progress.connect(_on_bake_progress)
 
 func hide_ui() -> void:
-	var srv = Engine.get_singleton("ResonanceServer") if Engine.has_singleton("ResonanceServer") else null
-	if srv and srv.has_signal("bake_progress") and _progress_bar:
-		if srv.bake_progress.is_connected(_on_bake_progress):
-			srv.bake_progress.disconnect(_on_bake_progress)
+	var srv: Variant = Engine.get_singleton("ResonanceServer") if Engine.has_singleton("ResonanceServer") else null
+	if srv and srv.has_signal("bake_progress") and srv.bake_progress.is_connected(_on_bake_progress):
+		srv.bake_progress.disconnect(_on_bake_progress)
 	if _progress_dialog:
-		if _progress_dialog.close_requested.is_connected(_on_cancel_pressed):
+		if _progress_dialog.is_inside_tree() and _progress_dialog.close_requested.is_connected(_on_cancel_pressed):
 			_progress_dialog.close_requested.disconnect(_on_cancel_pressed)
 		_progress_dialog.queue_free()
 		_progress_dialog = null
 	_progress_bar = null
 	_stage_label = null
+	_status_label = null
 	_details_panel = null
 
 func set_bake_status(text: String) -> void:
-	if _progress_dialog:
-		var vbox = _progress_dialog.get_child(0) as VBoxContainer
-		if vbox:
-			var lbl = vbox.get_node_or_null("StatusLabel")
-			if lbl:
-				lbl.call_deferred("set_text", text)
-			_append_details(text)
+	if _status_label:
+		_status_label.call_deferred("set_text", text)
+	if _details_panel:
+		_append_details(text)
 
 func set_stage(current: int, total: int, est_remaining: String = "") -> void:
 	if _stage_label:
-		var t = UIStrings.PROGRESS_STAGE % [current, total]
+		var t: String = UIStrings.PROGRESS_STAGE % [current, total]
 		if not est_remaining.is_empty():
 			t += "  " + est_remaining
 		_stage_label.call_deferred("set_text", t)
@@ -138,7 +136,7 @@ func _on_bake_progress(progress: float) -> void:
 
 func _on_cancel_pressed() -> void:
 	cancel_requested = true
-	var srv = Engine.get_singleton("ResonanceServer") if Engine.has_singleton("ResonanceServer") else null
+	var srv: Variant = Engine.get_singleton("ResonanceServer") if Engine.has_singleton("ResonanceServer") else null
 	if srv:
 		srv.cancel_reflections_bake()
 		srv.cancel_pathing_bake()

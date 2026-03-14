@@ -70,6 +70,13 @@ func test_parse_tres_data_probe_positions():
 	assert_true(result.probe_positions is PackedVector3Array, "probe_positions should be PackedVector3Array")
 	assert_eq(result.probe_positions.size(), 2, "probe_positions should have 2 elements")
 
+func test_parse_tres_data_invalid_data_type_fallback():
+	var content = "[resource]\ndata = \"not_a_byte_array\""
+	var result = _loader._parse_tres_data(content)
+	assert_true(result is Dictionary, "should return Dictionary")
+	assert_true(result.data is PackedByteArray, "invalid type should fallback to empty PackedByteArray")
+	assert_eq(result.data.size(), 0, "invalid data should yield empty array")
+
 # --- Public API tests ---
 
 func test_get_recognized_extensions():

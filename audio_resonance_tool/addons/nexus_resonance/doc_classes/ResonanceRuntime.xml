@@ -12,7 +12,7 @@
 		<method name="get_config_dict">
 			<return type="Dictionary" />
 			<description>
-				Returns config dict for init_audio_engine. Merges runtime config resource with node's debug flags (debug_occlusion, debug_reflections, debug_pathing).
+				Returns config dict for init_audio_engine. Merges runtime config resource with node's debug flags (debug_occlusion).
 			</description>
 		</method>
 	</methods>
@@ -20,26 +20,17 @@
 		<member name="runtime" type="ResonanceRuntimeConfig">
 			Runtime configuration resource. Create or link an existing .tres. Auto-created default if empty.
 		</member>
-		<member name="debug_overlay_visible" type="bool" default="false">
-			Show debug overlay (audio frame size, etc.).
+		<member name="debug_overlay_toggle_key" type="int" default="4194332">
+			Key to toggle debug overlay at runtime (default: F3).
 		</member>
-		<member name="debug_occlusion" type="bool" default="false">
-			Enable occlusion debug visualization.
+		<member name="performance_overlay_enabled" type="bool" default="false">
+			Enable optional performance overlay (FPS, frame time). Toggle with F4.
 		</member>
-		<member name="debug_reflections" type="bool" default="false">
-			[UNDER CONSTRUCTION] Visualize reflection rays from listener. Requires Realtime Rays > 0.
+		<member name="performance_overlay_toggle_key" type="int" default="4194333">
+			Key to toggle performance overlay at runtime (default: F4).
 		</member>
-		<member name="debug_pathing" type="bool" default="false">
-			Visualize pathing segments (green = unoccluded, red = occluded).
-		</member>
-		<member name="reflection_ray_max_bounce" type="int" default="-1">
-			Max bounce index to show in reflection ray visualization (-1 = no limit).
-		</member>
-		<member name="reflection_viz_ray_stride" type="int" default="1">
-			Draw every Nth ray (1 = all, 10 = 10%). Reduces visual clutter.
-		</member>
-		<member name="reflection_viz_bounce_stride" type="int" default="1">
-			For multi-bounce: draw every Nth ray per bounce level (1 = all, 10 = 10% per bounce).
+		<member name="debug_sources" type="bool" default="false">
+			Draw source and reflection rays for debugging. Requires ResonanceServer debug support.
 		</member>
 	</members>
 </class>

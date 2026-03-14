@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://diprmelvdbu83"]
+
+[ext_resource type="PackedScene" uid="uid://d3px17maaj7v8" path="res://props/assets/SM_Stairs_01/SM_Stairs_01.gltf" id="1_qt42q"]
+
+[node name="SM_Stairs_01" type="Node3D" unique_id=1154051765]
+
+[node name="SM_Stairs_01" type="StaticBody3D" parent="." unique_id=1781035988 instance=ExtResource("1_qt42q")]
+metadata/_nexus_gltf_path = "res://props/assets/SM_Stairs_01/SM_Stairs_01.gltf"
