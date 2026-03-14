@@ -7,7 +7,7 @@
 
 
 #if defined(_WIN32) || defined(_WIN64)
-#include <Windows.h>
+#include <windows.h>
 #else
 #include <dlfcn.h>
 #endif
