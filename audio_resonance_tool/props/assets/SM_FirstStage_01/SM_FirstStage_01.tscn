@@ -1,9 +1,0 @@
-[gd_scene format=3 uid="uid://x6vapskrtkq1"]
-
-[ext_resource type="PackedScene" uid="uid://c0ivpaw0tfbhb" path="res://props/assets/SM_FirstStage_01/SM_FirstStage_01.gltf" id="1_7c81p"]
-
-[node name="SM_FirstStage_01" type="Node3D" unique_id=794440272]
-
-[node name="SM_FirstStage_01" type="StaticBody3D" parent="." unique_id=1879812777 instance=ExtResource("1_7c81p")]
-collision_mask = 131
-metadata/_nexus_gltf_path = "res://props/assets/SM_FirstStage_01/SM_FirstStage_01.gltf"

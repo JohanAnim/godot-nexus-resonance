@@ -15,7 +15,6 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="nexus_resonance"
-run/main_scene="uid://c7ne1ktjyrhao"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
 
@@ -27,6 +26,7 @@ nexus_resonance/logger/output_to_file=false
 nexus_resonance/logger/file_path="user://nexus_resonance_log.ndjson"
 nexus_resonance/bus="Master"
 nexus_resonance/reverb_bus_name="ResonanceReverb"
+nexus_resonance/bake/output_dir="res://audio_data/"
 
 [autoload]
 
@@ -39,7 +39,7 @@ window/vsync/vsync_mode=0
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/nexus_importer/plugin.cfg", "res://addons/nexus_resonance/plugin.cfg")
+enabled=PackedStringArray("res://addons/nexus_resonance/plugin.cfg")
 
 [nexus]
 

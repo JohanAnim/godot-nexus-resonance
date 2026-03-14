@@ -1,9 +1,0 @@
-[gd_scene format=3 uid="uid://cpfmmbueqcbgw"]
-
-[ext_resource type="PackedScene" uid="uid://dt6l5u4k0f8ys" path="res://props/assets/SM_Wall_Inner_10dm_01/SM_Wall_Inner_10dm_01.gltf" id="1_56hvx"]
-
-[node name="SM_Wall_Inner_10dm_01" type="Node3D" unique_id=473529598]
-
-[node name="SM_Wall_Inner_10dm_01" type="StaticBody3D" parent="." unique_id=1869303344 instance=ExtResource("1_56hvx")]
-collision_mask = 131
-metadata/_nexus_gltf_path = "res://props/assets/SM_Wall_Inner_10dm_01/SM_Wall_Inner_10dm_01.gltf"

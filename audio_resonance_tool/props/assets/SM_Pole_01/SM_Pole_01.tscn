@@ -1,9 +1,0 @@
-[gd_scene format=3 uid="uid://1xwuh3uv0ycp"]
-
-[ext_resource type="PackedScene" uid="uid://bmq3jx7dd6mny" path="res://props/assets/SM_Pole_01/SM_Pole_01.gltf" id="1_pifur"]
-
-[node name="SM_Pole_01" type="Node3D" unique_id=815831756]
-
-[node name="SM_Pole_01" type="StaticBody3D" parent="." unique_id=1187752503 instance=ExtResource("1_pifur")]
-collision_mask = 131
-metadata/_nexus_gltf_path = "res://props/assets/SM_Pole_01/SM_Pole_01.gltf"
