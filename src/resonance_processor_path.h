@@ -6,19 +6,19 @@
 
 namespace godot {
 
-enum class PathInitFlags : int {
-    NONE = 0,
-    PATHEFFECT = 1 << 0,
-    BUFFERS = 1 << 1,
-};
-inline PathInitFlags operator|(PathInitFlags a, PathInitFlags b) {
-    return static_cast<PathInitFlags>(static_cast<int>(a) | static_cast<int>(b));
-}
-inline bool operator&(PathInitFlags a, PathInitFlags b) {
-    return (static_cast<int>(a) & static_cast<int>(b)) != 0;
-}
+    enum class PathInitFlags : int {
+        NONE = 0,
+        PATHEFFECT = 1 << 0,
+        BUFFERS = 1 << 1,
+    };
+    inline PathInitFlags operator|(PathInitFlags a, PathInitFlags b) {
+        return static_cast<PathInitFlags>(static_cast<int>(a) | static_cast<int>(b));
+    }
+    inline bool operator&(PathInitFlags a, PathInitFlags b) {
+        return (static_cast<int>(a) & static_cast<int>(b)) != 0;
+    }
 
-class ResonancePathProcessor {
+    class ResonancePathProcessor {
     private:
         IPLContext context = nullptr;
         IPLPathEffect path_effect = nullptr;
@@ -41,7 +41,7 @@ class ResonancePathProcessor {
         void cleanup();
 
         void process(const IPLAudioBuffer& in_buffer, const IPLPathEffectParams& params, IPLAudioBuffer& out_buffer);
-};
+    };
 
 } // namespace godot
 
