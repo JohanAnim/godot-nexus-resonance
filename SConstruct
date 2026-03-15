@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os
+import shutil
 import sys
 
 env = SConscript("src/lib/godot-cpp/SConstruct")
@@ -108,6 +109,28 @@ else:
         target=target_path + target_name,
         source=sources,
     )
+
+# Copy Steam Audio runtime DLLs for Windows so nexus_resonance.dll can load (avoids Error 126: "Das angegebene Modul wurde nicht gefunden")
+if env["platform"] == "windows":
+    steam_src = os.path.join(steam_audio_lib, "windows-x64" if env["arch"] == "x86_64" else "windows-x86")
+    steam_dlls = ["phonon.dll", "GPUUtilities.dll", "TrueAudioNext.dll"]
+
+    def copy_steam_dlls(target, source, env):
+        if not os.path.isdir(steam_src):
+            print("WARNING: Steam Audio lib not found at %s. Run: python scripts/install_steam_audio.py" % steam_src)
+            return 0
+        dst = os.path.join(target_base, "windows")
+        os.makedirs(dst, exist_ok=True)
+        for dll in steam_dlls:
+            src_path = os.path.join(steam_src, dll)
+            if os.path.isfile(src_path):
+                shutil.copy2(src_path, dst)
+                print("Copied %s -> %s" % (dll, dst))
+            else:
+                print("WARNING: %s not found in %s" % (dll, steam_src))
+        return 0
+
+    env.AddPostAction(library, env.Action(copy_steam_dlls))
 
 # --- C++ UNIT TESTS (no Godot/Steam Audio) ---
 build_tests = ARGUMENTS.get("build_tests", "1") == "1"
